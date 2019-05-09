@@ -4,6 +4,7 @@ from tensorflow.contrib import rnn
 import os
 import numpy as np
 
+
 # Loads data from file into variable
 def loadData(path):
     return pickle.load(open(path, "rb"))
@@ -17,7 +18,6 @@ maxSampleLen = 0  # timestep is how long is the file(samples in the file)
 for rootPath, directories, files in os.walk(folderInputs):
     for filename in files:
         if '.inp2' in filename:
-            # print('Extracting Features of:', filename, '\t\t @', rootPath)
             filepath = rootPath + filename
             inputFile = loadData(filepath)
             maxSampleLen = max(maxSampleLen, len(inputFile))
