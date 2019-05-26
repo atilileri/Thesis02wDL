@@ -86,6 +86,8 @@ def RNN(x_input, weights_param, biases_param):
     # reshape to [1, n_input]
     x_input = tf.reshape(x_input, [-1, n_input])
 
+    print(np.shape(x_input))
+
     # Generate a n_input-element sequence of inputs
     # (eg. [had] [a] [general] -> [20] [6] [33])
     x_input = tf.split(x_input, n_input, 1)
@@ -142,6 +144,8 @@ with tf.Session() as session:
         symbols_out_onehot = np.zeros([vocab_size], dtype=float)
         symbols_out_onehot[dictionary[str(training_data[offset+n_input])]] = 1.0
         symbols_out_onehot = np.reshape(symbols_out_onehot, [1, -1])
+
+        # print(np.shape(symbols_in_keys))
 
         _, acc, loss, onehot_pred = session.run([optimizer, accuracy, cost, pred],
                                                 feed_dict={x: symbols_in_keys, y: symbols_out_onehot})
