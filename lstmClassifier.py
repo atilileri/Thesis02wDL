@@ -14,17 +14,15 @@ def loadData(path):
 folderInputs = 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/'
 # folderInputs = 'E:/atil/BreathDataset/Processed/inputsFrom_20190504_181608/'
 inputs = []
-lengths = []
-labels = []
 inputDictionary = []
 maxSampleLen = 0  # timestep is how long is the file(samples in the file)
 labelList = dict()
 
+# prepare max length and file names
 for rootPath, directories, files in os.walk(folderInputs):
     for filename in files:
         if '.inp2' in filename:
-            filepath = rootPath + filename
-            inputFile = loadData(filepath)
+            inputFile = loadData(rootPath + filename)
             maxSampleLen = max(maxSampleLen, len(inputFile))
             label = filename[:2]
             if label not in labelList:
@@ -34,23 +32,32 @@ for rootPath, directories, files in os.walk(folderInputs):
                     labelList[l].append(0)
                 labelList[label] = (labelCount * [0])
                 labelList[label].append(1)
-            labels.append(labelList[label])
-            lengths.append(len(inputFile))
-            inputs.append(inputFile)
+            # labels.append(labelList[label])
+            # lengths.append(len(inputFile))
+            # inputs.append(inputFile)
+            inputs.append(filename)
 print('Total of ' + str(len(inputs)) + ' inputs loaded @ ' + folderInputs)
+print('Max file length:', maxSampleLen, 'samples')
+print('Total of', len(labelList), 'classes')
+
+# todo - ai : remove maxlen setting to original
+maxSampleLen = 10
+
+np.random.shuffle(inputs)
+# print(inputs)
 
 # print(labelList)
 
-for i in range(len(inputs)):
-    diff = maxSampleLen - len(inputs[i])
-    inputs[i] = np.pad(inputs[i], ((0, diff), (0, 0), (0, 0), (0, 0)), mode='constant', constant_values=0)
-print(np.shape(inputs))
+# for i in range(len(inputs)):
+#     diff = maxSampleLen - len(inputs[i])
+#     inputs[i] = np.pad(inputs[i], ((0, diff), (0, 0), (0, 0), (0, 0)), mode='constant', constant_values=0)
+# print(np.shape(inputs))
 
-# todo - ai : remove maxlen setting to original
-for i in range(len(inputs)):
-    maxSampleLen = 10
-    inputs[i] = inputs[i][:maxSampleLen]
-print(np.shape(inputs))
+# # todo - ai : remove maxlen setting to original
+# for i in range(len(inputs)):
+#     maxSampleLen = 10
+#     inputs[i] = inputs[i][:maxSampleLen]
+# print(np.shape(inputs))
 
 # shape is (fileCount, timeSteps(max sampleCount), channelCount, 2(instf and mag), imfCount)
 
@@ -71,11 +78,11 @@ numHidden = 128
 # todo - ai : increase classes to total number of people after constructing nw structure
 numClasses = len(labelList)  # total number of classification classes (ie. people)
 
-# todo - ai : move these lines up
-# flatten features
-for i in range(len(inputs)):
-    inputs[i] = inputs[i].reshape(-1, channels*numInput[0]*numInput[1])
-print(np.shape(inputs))
+# # todo - ai : move these lines up
+# # flatten features
+# for i in range(len(inputs)):
+#     inputs[i] = inputs[i].reshape(-1, channels*numInput[0]*numInput[1])
+# print(np.shape(inputs))
 
 # tf Graph input
 x = tf.placeholder("float", [None, timeSteps, channels*numInput[0]*numInput[1]])
@@ -95,6 +102,7 @@ def rnnFunc(xParam, weiParam, biaParam):
 
     # print(np.shape(xParam))
     # Manipulate x here for correct shape, if not
+    # xParam = np.reshape(xParam, (-1, channels*numInput[0]*numInput[1]))
     xParam = tf.unstack(xParam, timeSteps, 1)
 
     # print(np.shape(xParam))
@@ -121,22 +129,22 @@ optimizer = tf.train.GradientDescentOptimizer(learning_rate=learningRate).minimi
 correct_pred = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
-for i in range(len(inputs)):
-    inputDictionary.append({'label': labels[i], 'length': lengths[i], 'values': inputs[i]})
-np.random.shuffle(inputDictionary)
-
-inputs = []
-labels = []
-lengths = []
-
-for idd in inputDictionary:
-    inputs.append(idd['values'])
-    labels.append(idd['label'])
-    lengths.append(idd['length'])
-
-print(np.shape(inputs))
-print(np.shape(labels))
-print(np.shape(lengths))
+# for i in range(len(inputs)):
+#     inputDictionary.append({'label': labels[i], 'length': lengths[i], 'values': inputs[i]})
+# np.random.shuffle(inputDictionary)
+#
+# inputs = []
+# labels = []
+# lengths = []
+#
+# for idd in inputDictionary:
+#     inputs.append(idd['values'])
+#     labels.append(idd['label'])
+#     lengths.append(idd['length'])
+#
+# print(np.shape(inputs))
+# print(np.shape(labels))
+# print(np.shape(lengths))
 
 # initializing the variables
 init = tf.global_variables_initializer()
@@ -155,9 +163,11 @@ with tf.Session() as sess:
         loss_total = 0
         acc_total = 0
         for step in range(0, trainingSteps):
-            batchX = inputs[step]
+            filename = inputs[step]
+            inFile = loadData(folderInputs + filename)
+            batchX = inFile[:maxSampleLen]
             batchX = np.reshape(batchX, (1, maxSampleLen, channels*numInput[0]*numInput[1]))
-            batchY = labels[step]
+            batchY = labelList[filename[:2]]
             batchY = np.reshape(batchY, (1, numClasses))
             # Manipulate x here for correct shape, if not
 
@@ -175,15 +185,17 @@ with tf.Session() as sess:
         accur.append(acc_total/trainingSteps)
 
         # print("Optimization Finished!")
+    acc_total = 0
+    for inpFl in inputs[-testSteps:]:
+        inFile = loadData(folderInputs + inpFl)
+        batchX = inFile[:maxSampleLen]
+        batchX = np.reshape(batchX, (1, maxSampleLen, channels*numInput[0]*numInput[1]))
+        batchY = labelList[inpFl[:2]]
+        batchY = np.reshape(batchY, (1, numClasses))
 
-    batchX = inputs[-testSteps:]
-    batchX = np.reshape(batchX, (testSteps, maxSampleLen, channels*numInput[0]*numInput[1]))
-    batchY = labels[-testSteps:]
-    batchY = np.reshape(batchY, (testSteps, numClasses))
-
-    print("Testing Accuracy (" + str(testSteps) + " steps):", sess.run(accuracy,
-                                                                       feed_dict={x: batchX, y: batchY,
-                                                                                  seqLen: maxSampleLen}))
+        acc = sess.run(accuracy, feed_dict={x: batchX, y: batchY, seqLen: maxSampleLen})
+        acc_total += acc
+    print("Testing Accuracy:", acc_total/testSteps)
 
     plt.plot(loses)
     plt.show()
