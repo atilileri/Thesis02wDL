@@ -11,12 +11,19 @@ def loadData(path):
     return pickle.load(open(path, "rb"))
 
 
-folderInputs = 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/'
+f = open('conf.txt', 'r')
+parameters = f.read().splitlines()
+folderInputs = parameters[0]
+learningRate = float(parameters[1])
+# number of units in RNN cell
+numHidden = int(parameters[2])
+trainingEpoch = int(parameters[3])
+optimizerOpt = parameters[4]
+
 inputs = []
 inputDictionary = []
 maxSampleLen = 0  # timestep is how long is the file(samples in the file)
 labelList = dict()
-maxLenSparsed = 10
 
 # prepare max length and file names
 for rootPath, directories, files in os.walk(folderInputs):
@@ -36,27 +43,18 @@ print('Total of ' + str(len(inputs)) + ' inputs loaded @ ' + folderInputs)
 print('Max file length:', maxSampleLen, 'samples')
 print('Total of', len(labelList), 'classes')
 
-stepSize = int(np.ceil(maxSampleLen / maxLenSparsed))
-maxSampleLen = maxLenSparsed
-
 np.random.shuffle(inputs)
 
 # Training Parameters
-learningRate = 0.001
-# todo - ai : create inputs for all breath examples after constructing network structure
 # train with 80% files, test with 20%
 totalOfInputs = len(inputs)
 trainingSteps = int(totalOfInputs * 0.8)
 testSteps = totalOfInputs - trainingSteps
-trainingEpoch = 100
 
 numInput = [2, 9]  # input data size (9 inst freqs, 9 inst mags)
 channels = 4  # recorded with 4 microphones
 timeSteps = maxSampleLen
 
-# number of units in RNN cell
-numHidden = 128
-# todo - ai : increase classes to total number of people after constructing nw structure
 numClasses = len(labelList)  # total number of classification classes (ie. people)
 
 # tf Graph input
@@ -91,8 +89,13 @@ prediction = tf.nn.softmax(logits)
 
 # loss and optimizer
 loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=y))
-optimizer = tf.train.GradientDescentOptimizer(learning_rate=learningRate).minimize(loss)
-# optimizer = tf.train.AdamOptimizer(learning_rate=learningRate).minimize(loss)
+if 'Adam' == optimizerOpt:
+    optimizer = tf.train.AdamOptimizer(learning_rate=learningRate).minimize(loss)
+elif 'Grad' == optimizerOpt:
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate=learningRate).minimize(loss)
+else:
+    optimizer = None
+    print('Define optimizer')
 
 # model evaluation
 correct_pred = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))
@@ -115,7 +118,6 @@ with tf.Session() as sess:
         for step in range(0, trainingSteps):
             filename = inputs[step]
             inFile = loadData(folderInputs + filename)
-            inFile = [inFile[x] for x in range(0, len(inFile), stepSize)]
             sequenceLength = len(inFile)
             diff = maxSampleLen - sequenceLength
             batchX = np.pad(inFile, ((0, diff), (0, 0), (0, 0), (0, 0)), mode='constant', constant_values=0)
@@ -140,7 +142,6 @@ with tf.Session() as sess:
     acc_total = 0
     for inpFl in inputs[-testSteps:]:
         inFile = loadData(folderInputs + inpFl)
-        inFile = [inFile[x] for x in range(0, len(inFile), stepSize)]
         sequenceLength = len(inFile)
         diff = maxSampleLen - sequenceLength
         batchX = np.pad(inFile, ((0, diff), (0, 0), (0, 0), (0, 0)), mode='constant', constant_values=0)
