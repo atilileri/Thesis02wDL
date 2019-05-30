@@ -18,19 +18,25 @@ maxSampleLen = 0  # timestep is how long is the file(samples in the file)
 labelList = dict()
 
 # prepare max length and file names
+print('Initial Scan. Classes:', end='')
 for rootPath, directories, files in os.walk(folderInputs):
     for filename in files:
         if '.inp2' in filename:
             inputFile = loadData(rootPath + filename)
-            maxSampleLen = max(maxSampleLen, len(inputFile))
-            label = filename[:2]
-            if label not in labelList:
-                labelCount = len(labelList)
-                for l in labelList:
-                    labelList[l].append(0)
-                labelList[label] = (labelCount * [0])
-                labelList[label].append(1)
-            inputs.append(filename)
+            inputShape = np.shape(inputFile)
+            if inputShape[1:] == (4, 2, 9):  # todo - ai : fix all files, extract again
+                maxSampleLen = max(maxSampleLen, len(inputFile))
+                label = filename[:2]
+                if label not in labelList:
+                    print(os.linesep+label, end='')
+                    labelCount = len(labelList)
+                    for l in labelList:
+                        labelList[l].append(0)
+                    labelList[label] = (labelCount * [0])
+                    labelList[label].append(1)
+                print('.', end='', flush=True)
+                inputs.append(filename)
+print('')
 print('Total of ' + str(len(inputs)) + ' inputs loaded @ ' + folderInputs)
 print('Max file length:', maxSampleLen, 'samples')
 print('Total of', len(labelList), 'classes')
@@ -39,7 +45,6 @@ np.random.shuffle(inputs)
 
 # Training Parameters
 learningRate = 0.001
-# todo - ai : create inputs for all breath examples after constructing network structure
 # train with 80% files, test with 20%
 totalOfInputs = len(inputs)
 trainingSteps = int(totalOfInputs * 0.8)
@@ -52,7 +57,6 @@ timeSteps = maxSampleLen
 
 # number of units in RNN cell
 numHidden = 128
-# todo - ai : increase classes to total number of people after constructing nw structure
 numClasses = len(labelList)  # total number of classification classes (ie. people)
 
 # tf Graph input
