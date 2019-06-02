@@ -1,9 +1,10 @@
 import random
 
 inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/']
-featureModes = ['FirstFreq', 'FirstMag', 'Freqs', 'Mags', 'All']
+# featureModes = ['FirstFreq', 'FirstMag', 'Freqs', 'Mags', 'All']
+featureModes = ['All']
 trainingEpochs = [10]
-learningRates = [0.001, 0.002]
+learningRates = [0.001, 0.002, 0.008]
 numHiddens = [2, 4, 8, 16]
 numLayers = [1, 2, 3]
 celltypes = ['lstm', 'gru']
