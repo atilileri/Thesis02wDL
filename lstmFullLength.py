@@ -12,7 +12,6 @@ def loadData(path):
 
 
 def rnnFunc(xParam, weiParam, biaParam, cell):
-
     # generate prediction
     outputs, states = tf.nn.dynamic_rnn(cell, xParam, dtype=tf.float32)
 
