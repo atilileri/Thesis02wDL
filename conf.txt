@@ -1,9 +1,9 @@
-{'inputFolder': 'F:/atil/inputsFrom_mini_sample_set/', 'learningRate': 0.001, 'numHidden': 8, 'trainingEpoch': 5, 'optimizerOpt': 'Grad', 'featureMode': 'FirstFreq'}
-{'inputFolder': 'F:/atil/inputsFrom_mini_sample_set/', 'learningRate': 0.002, 'numHidden': 16, 'trainingEpoch': 10, 'optimizerOpt': 'Adam', 'featureMode': 'FirstMag'}
-{'inputFolder': 'F:/atil/inputsFrom_mini_sample_set/', 'learningRate': 0.004, 'numHidden': 32, 'trainingEpoch': 100, 'optimizerOpt': 'Grad', 'featureMode': 'All'}
-{'inputFolder': 'F:/atil/inputsFrom_mini_sample_set/', 'learningRate': 0.008, 'numHidden': 64, 'trainingEpoch': 20, 'optimizerOpt': 'Adam', 'featureMode': 'Mags'}
-{'inputFolder': 'F:/atil/inputsFrom_mini_sample_set/', 'learningRate': 0.016, 'numHidden': 128, 'trainingEpoch': 40, 'optimizerOpt': 'Grad', 'featureMode': 'Freqs'}
-{'inputFolder': 'F:/atil/inputsFrom_mini_sample_set/', 'learningRate': 0.032, 'numHidden': 64, 'trainingEpoch': 50, 'optimizerOpt': 'Adam', 'featureMode': 'All'}
-{'inputFolder': 'F:/atil/inputsFrom_mini_sample_set/', 'learningRate': 0.064, 'numHidden': 32, 'trainingEpoch': 60, 'optimizerOpt': 'Grad', 'featureMode': 'All'}
-{'inputFolder': 'F:/atil/inputsFrom_mini_sample_set/', 'learningRate': 0.128, 'numHidden': 16, 'trainingEpoch': 10, 'optimizerOpt': 'Adam', 'featureMode': 'All'}
-{'inputFolder': 'F:/atil/inputsFrom_20190504_181608/', 'learningRate': 0.001, 'numHidden': 8, 'trainingEpoch': 5, 'optimizerOpt': 'Grad', 'featureMode': 'FirstFreq'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.001, 'numHidden': 8, 'numLayer': 2, 'trainingEpoch': 5, 'optimizerOpt': 'Grad', 'featureMode': 'FirstFreq', 'cellType' : 'lstm'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.002, 'numHidden': 16, 'numLayer': 1, 'trainingEpoch': 10, 'optimizerOpt': 'Adam', 'featureMode': 'FirstMag', 'cellType' : 'gru'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.004, 'numHidden': 32, 'numLayer': 1, 'trainingEpoch': 100, 'optimizerOpt': 'Grad', 'featureMode': 'All', 'cellType' : 'lstm'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.008, 'numHidden': 64, 'numLayer': 3, 'trainingEpoch': 20, 'optimizerOpt': 'Adam', 'featureMode': 'Mags', 'cellType' : 'lstm'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.016, 'numHidden': 128, 'numLayer': 2, 'trainingEpoch': 40, 'optimizerOpt': 'Grad', 'featureMode': 'Freqs', 'cellType' : 'lstm'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.032, 'numHidden': 64, 'numLayer': 2, 'trainingEpoch': 50, 'optimizerOpt': 'Adam', 'featureMode': 'All', 'cellType' : 'gru'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.064, 'numHidden': 32, 'numLayer': 3, 'trainingEpoch': 60, 'optimizerOpt': 'Grad', 'featureMode': 'All', 'cellType' : 'lstm'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.128, 'numHidden': 16, 'numLayer': 3, 'trainingEpoch': 10, 'optimizerOpt': 'Adam', 'featureMode': 'All', 'cellType' : 'gru'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/', 'learningRate': 0.001, 'numHidden': 8, 'numLayer': 2, 'trainingEpoch': 5, 'optimizerOpt': 'Grad', 'featureMode': 'FirstFreq', 'cellType' : 'lstm'}

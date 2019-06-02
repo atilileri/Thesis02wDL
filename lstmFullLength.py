@@ -34,9 +34,11 @@ for parameterLine in f.read().splitlines():
     folderInputs = parameters['inputFolder']
     learningRate = parameters['learningRate']
     numHidden = parameters['numHidden']
+    numLayer = parameters['numLayer']
     trainingEpoch = parameters['trainingEpoch']
     optimizerOpt = parameters['optimizerOpt']
     featureMode = parameters['featureMode']
+    cellType = parameters['cellType']
 
     print('================== lstmFullLength =========================================================================')
     print('Parameters:', parameters)
@@ -117,9 +119,18 @@ for parameterLine in f.read().splitlines():
         'out': tf.Variable(tf.random_normal([numClasses]))
     }
 
-    cellType = rnn.BasicLSTMCell(numHidden)
+    cells = list()
+    for c in range(numLayer):
+        if 'lstm' == cellType:
+            cells.append(rnn.LSTMCell(numHidden))
+        elif 'gru' == cellType:
+            cells.append(rnn.GRUCell(numHidden))
+        else:
+            print('ERROR: Unrecognized parameter cellType is: (', parameters['cellType'], ')')
+            break
 
-    logits = rnnFunc(x, weights, biases, cellType, timeSteps)
+    networkStc = tf.nn.rnn_cell.MultiRNNCell(cells)
+    logits = rnnFunc(x, weights, biases, networkStc, timeSteps)
     prediction = tf.nn.softmax(logits)
 
     # loss and optimizer
