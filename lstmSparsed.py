@@ -1,11 +1,9 @@
 import pickle
 import tensorflow as tf
-from tensorflow.contrib import rnn
 import os
 import numpy as np
 import sys
 from datetime import datetime
-import matplotlib.pyplot as plt
 
 
 # Loads data from file into variable
@@ -13,12 +11,10 @@ def loadData(path):
     return pickle.load(open(path, "rb"))
 
 
-def rnnFunc(xParam, weiParam, biaParam, cell, ts):
-
-    xParam = tf.unstack(xParam, ts, 1)
+def rnnFunc(xParam, weiParam, biaParam, cell):
 
     # generate prediction
-    outputs, states = rnn.static_rnn(cell, xParam, sequence_length=seqLen, dtype=tf.float32)
+    outputs, states = tf.nn.dynamic_rnn(cell, xParam, dtype=tf.float32)
 
     # there are n_input outputs but we only want the last output
     return tf.matmul(outputs[-1], weiParam['out']) + biaParam['out']
@@ -27,7 +23,7 @@ def rnnFunc(xParam, weiParam, biaParam, cell, ts):
 # enable for file printing
 # sys.stdout = open('out.txt', 'a')
 
-maxLenSparsed = 10
+stepSize = 1000
 f = open('conf.txt', 'r')
 for parameterLine in f.read().splitlines():
     parameters = eval(parameterLine)
@@ -41,7 +37,7 @@ for parameterLine in f.read().splitlines():
     featureMode = parameters['featureMode']
     cellType = parameters['cellType']
 
-    print('================== lstmSparsed with length:', maxLenSparsed, '=============================================')
+    print('================== lstmSparsed with stepSize:', stepSize, '================================================')
     print('Parameters:', parameters)
     print('==================', datetime.now().strftime('%Y.%m.%d %H:%M:%S'), '===========================', flush=True)
 
@@ -70,12 +66,11 @@ for parameterLine in f.read().splitlines():
     # prepare max length and file names
     print('Initial Scan. Classes:', end='')
     for rootPath, directories, files in os.walk(folderInputs):
-        for filename in files:
+        for filename in sorted(files):
             if '.inp2' in filename:
                 inputFile = loadData(rootPath + filename)
                 inputShape = np.shape(inputFile)
                 if inputShape[1:] == (4, 2, 9):  # todo - ai : fix all files, extract again
-                    maxSampleLen = max(maxSampleLen, len(inputFile))
                     label = filename[:2]
                     if label not in labelList:
                         print('')
@@ -92,11 +87,7 @@ for parameterLine in f.read().splitlines():
 
     print('')
     print('Total of ' + str(len(inputs)) + ' inputs loaded @ ' + folderInputs)
-    print('Max file length:', maxSampleLen, 'samples')
     print('Total of', len(labelList), 'classes')
-
-    stepSize = int(np.ceil(maxSampleLen / maxLenSparsed))
-    maxSampleLen = maxLenSparsed
 
     np.random.shuffle(inputs)
 
@@ -106,14 +97,12 @@ for parameterLine in f.read().splitlines():
     testSteps = totalOfInputs - trainingSteps
     print(trainingSteps, 'steps or training,', testSteps, 'steps for test')
 
-    timeSteps = maxSampleLen
     numClasses = len(labelList)  # total number of classification classes (ie. people)
 
     tf.reset_default_graph()
     # tf Graph input
-    x = tf.placeholder("float", [None, timeSteps, flattenedFeatures])  # feature set, flattened
+    x = tf.placeholder("float", [None, None, flattenedFeatures])  # feature set, flattened
     y = tf.placeholder("float", [None, numClasses])
-    seqLen = tf.placeholder(tf.int32)
 
     # RNN output node weights and biases
     weights = {
@@ -126,15 +115,15 @@ for parameterLine in f.read().splitlines():
     cells = list()
     for c in range(numLayer):
         if 'lstm' == cellType:
-            cells.append(rnn.LSTMCell(numHidden))
+            cells.append(tf.nn.rnn_cell.LSTMCell(numHidden))
         elif 'gru' == cellType:
-            cells.append(rnn.GRUCell(numHidden))
+            cells.append(tf.nn.rnn_cell.GRUCell(numHidden))
         else:
             print('ERROR: Unrecognized parameter cellType is: (', parameters['cellType'], ')')
             break
 
     networkStc = tf.nn.rnn_cell.MultiRNNCell(cells)
-    logits = rnnFunc(x, weights, biases, networkStc, timeSteps)
+    logits = rnnFunc(x, weights, biases, networkStc)
     prediction = tf.nn.softmax(logits)
 
     # loss and optimizer
@@ -182,16 +171,12 @@ for parameterLine in f.read().splitlines():
                     inFile = inFile[:, 0, 1, :]
 
                 inFile = [inFile[x] for x in range(0, len(inFile), stepSize)]
-                sequenceLength = len(inFile)
-                diff = maxSampleLen - sequenceLength
-                batchX = np.pad(inFile, (((0, diff),) + (((0, 0),) * (np.ndim(inFile)-1))),
-                                mode='constant', constant_values=0)
-                batchX = np.reshape(batchX, (1, maxSampleLen, flattenedFeatures))
+                batchX = np.reshape(inFile, (1, len(inFile), flattenedFeatures))
                 batchY = labelList[filename[:2]]
                 batchY = np.reshape(batchY, (1, numClasses))
 
                 _, acc, mbloss, onehot_pred = sess.run([optimizer, accuracy, loss, logits],
-                                                       feed_dict={x: batchX, y: batchY, seqLen: sequenceLength})
+                                                       feed_dict={x: batchX, y: batchY})
 
                 loss_total += mbloss
                 acc_total += acc
@@ -225,15 +210,11 @@ for parameterLine in f.read().splitlines():
                 inFile = inFile[:, 0, 1, :]
 
             inFile = [inFile[x] for x in range(0, len(inFile), stepSize)]
-            sequenceLength = len(inFile)
-            diff = maxSampleLen - sequenceLength
-            batchX = np.pad(inFile, (((0, diff),) + (((0, 0),) * (np.ndim(inFile) - 1))),
-                            mode='constant', constant_values=0)
-            batchX = np.reshape(batchX, (1, maxSampleLen, flattenedFeatures))
+            batchX = np.reshape(inFile, (1, len(inFile), flattenedFeatures))
             batchY = labelList[inpFl[:2]]
             batchY = np.reshape(batchY, (1, numClasses))
 
-            acc = sess.run(accuracy, feed_dict={x: batchX, y: batchY, seqLen: sequenceLength})
+            acc = sess.run(accuracy, feed_dict={x: batchX, y: batchY})
             acc_total += acc
         print("Testing Accuracy:", acc_total/testSteps)
         print('')
