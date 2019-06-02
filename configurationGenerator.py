@@ -1,13 +1,17 @@
+import random
+
 inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_mini_sample_set/']
 featureModes = ['FirstFreq', 'FirstMag', 'Freqs', 'Mags', 'All']
-trainingEpochs = [5, 50]
+trainingEpochs = [10]
 learningRates = [0.001, 0.002]
-numHiddens = [128, 256]
-numLayers = [2, 4]
+numHiddens = [2, 4, 8, 16]
+numLayers = [1, 2, 3]
 celltypes = ['lstm', 'gru']
 optimizers = ['Adam', 'Grad']
 
 f = open('conf.txt', 'w')
+countLimit = 10
+listOfParams = list()
 iteration = 0
 for inp in inputFolders:
     for fm in featureModes:
@@ -27,6 +31,8 @@ for inp in inputFolders:
                                 parameters['cellType'] = ct
                                 parameters['optimizerOpt'] = opt
                                 iteration += 1
-                                print(parameters, file=f)
-print(iteration, 'iteration(s) put into configuration file.')
+                                listOfParams.append(parameters.copy())
+for i in range(countLimit):
+    print(random.choice(listOfParams), file=f)
+print(countLimit, ' random iteration(s) put into configuration file.')
 f.close()
