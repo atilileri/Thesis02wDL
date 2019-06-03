@@ -57,7 +57,9 @@ def durationFormatter(dur):
 # sys.stdout = open('out.txt', 'a')
 
 f = open('conf.txt', 'r')
-for parameterLine in f.read().splitlines():
+confList = f.read().splitlines()
+print('Total of %d configurations will be run' % len(confList))
+for parameterLine in confList:
     parameters = eval(parameterLine)
 
     folderInputs = parameters['inputFolder']
@@ -217,7 +219,7 @@ for parameterLine in f.read().splitlines():
             loses.append(loss_total)
             accur.append(acc_total/trainingSteps)
 
-            print('Epoch ' + str(e + 1) + ' Stats: Loss= ' + '{:.4f}'.format(loss_total) +
+            print('Epoch ' + str(e + 1) + ' Results: Loss= ' + '{:.4f}'.format(loss_total) +
                   ', Training Accuracy= ' + '{:.3f}'.format(acc_total/trainingSteps) +
                   ' Duration= %s' % durationFormatter(datetime.now() - epochStart), flush=True)
 
