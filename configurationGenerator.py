@@ -9,6 +9,7 @@ numHiddens = [2, 4, 8, 16]
 numLayers = [1, 2, 3]
 celltypes = ['lstm', 'gru']
 optimizers = ['Adam', 'Grad']
+stepSizes = [1, 10]
 
 f = open('conf.txt', 'w')
 countLimit = 10
@@ -22,17 +23,19 @@ for inp in inputFolders:
                     for nl in numLayers:
                         for ct in celltypes:
                             for opt in optimizers:
-                                parameters = dict()
-                                parameters['inputFolder'] = inp
-                                parameters['featureMode'] = fm
-                                parameters['trainingEpoch'] = te
-                                parameters['learningRate'] = lr
-                                parameters['numHidden'] = nh
-                                parameters['numLayer'] = nl
-                                parameters['cellType'] = ct
-                                parameters['optimizerOpt'] = opt
-                                iteration += 1
-                                listOfParams.append(parameters.copy())
+                                for ss in stepSizes:
+                                    parameters = dict()
+                                    parameters['inputFolder'] = inp
+                                    parameters['featureMode'] = fm
+                                    parameters['trainingEpoch'] = te
+                                    parameters['learningRate'] = lr
+                                    parameters['numHidden'] = nh
+                                    parameters['numLayer'] = nl
+                                    parameters['cellType'] = ct
+                                    parameters['optimizerOpt'] = opt
+                                    parameters['stepSize'] = ss
+                                    iteration += 1
+                                    listOfParams.append(parameters.copy())
 for i in range(countLimit):
     print(random.choice(listOfParams), file=f)
 print(countLimit, ' random iteration(s) put into configuration file.')

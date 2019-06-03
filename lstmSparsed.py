@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Loads data from file into variable
 def loadData(path):
-    return pickle.load(open(path, "rb"))
+    return pickle.load(open(path, 'rb'))
 
 
 def rnnFunc(xParam, weiParam, biaParam, cell):
@@ -19,10 +19,43 @@ def rnnFunc(xParam, weiParam, biaParam, cell):
     return tf.matmul(outputs[-1], weiParam['out']) + biaParam['out']
 
 
+def sparseIt(inputToBeSparsed, stepSz):
+    if stepSz > 1:
+        inputToBeSparsed = inputToBeSparsed[::stepSz]
+    return inputToBeSparsed
+
+
+def reset_graph():
+    if 'sess' in globals() and sess:
+        sess.close()
+    tf.reset_default_graph()
+
+
+def featureSlicer(inputToBeSliced, featureM):
+    if 'Freqs' == featureM:
+        inputToBeSliced = inputToBeSliced[:, :, 0, :]
+    elif 'Mags' == featureM:
+        inputToBeSliced = inputToBeSliced[:, :, 1, :]
+    elif 'FirstFreq' == featureM:
+        inputToBeSliced = inputToBeSliced[:, 0, 0, :]
+    elif 'FirstMag' == featureM:
+        inputToBeSliced = inputToBeSliced[:, 0, 1, :]
+    # else is 'All' == featureM. No slicing needed
+    return inputToBeSliced
+
+
+def durationFormatter(dur):
+    dur_in_secs = dur.total_seconds()
+    days = divmod(dur_in_secs, 86400)  # Get days (without [0]!)
+    hours = divmod(days[1], 3600)  # Use remainder of days to calc hours
+    minutes = divmod(hours[1], 60)  # Use remainder of hours to calc minutes
+    seconds = divmod(minutes[1], 1)  # Use remainder of minutes to calc seconds
+    return '%d days, %d hours, %d minutes, %d seconds' % (days[0], hours[0], minutes[0], seconds[0])
+
+
 # enable for file printing
 # sys.stdout = open('out.txt', 'a')
 
-stepSize = 1000
 f = open('conf.txt', 'r')
 for parameterLine in f.read().splitlines():
     parameters = eval(parameterLine)
@@ -35,6 +68,7 @@ for parameterLine in f.read().splitlines():
     optimizerOpt = parameters['optimizerOpt']
     featureMode = parameters['featureMode']
     cellType = parameters['cellType']
+    stepSize = parameters['stepSize']
 
     print('================== lstmSparsed with stepSize:', stepSize, '================================================')
     print('Parameters:', parameters)
@@ -98,10 +132,10 @@ for parameterLine in f.read().splitlines():
 
     numClasses = len(labelList)  # total number of classification classes (ie. people)
 
-    tf.reset_default_graph()
+    reset_graph()
     # tf Graph input
-    x = tf.placeholder("float", [None, None, flattenedFeatures])  # feature set, flattened
-    y = tf.placeholder("float", [None, numClasses])
+    x = tf.placeholder('float', [None, None, flattenedFeatures])  # feature set, flattened
+    y = tf.placeholder('float', [None, numClasses])
 
     # RNN output node weights and biases
     weights = {
@@ -126,7 +160,7 @@ for parameterLine in f.read().splitlines():
     prediction = tf.nn.softmax(logits)
 
     # loss and optimizer
-    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=y))
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits, labels=y))
     if 'Adam' == optimizerOpt:
         optimizer = tf.train.AdamOptimizer(learning_rate=learningRate).minimize(loss)
     elif 'Grad' == optimizerOpt:
@@ -151,25 +185,21 @@ for parameterLine in f.read().splitlines():
         accur = []
         # Training
         for e in range(0, trainingEpoch):
-            print("Epoch " + str(e + 1) + " /", trainingEpoch, " (", str(trainingSteps) + " training steps)", end='',
-                  flush=True)
+            print('')
+            print('Epoch ' + str(e + 1) + '/' + str(trainingEpoch), '(' + str(trainingSteps) +
+                  ' training steps) started.', flush=True)
             epochStart = datetime.now()
             loss_total = 0
             acc_total = 0
             for step in range(0, trainingSteps):
+                stepStart = datetime.now()
                 filename = inputs[step]
                 inFile = loadData(folderInputs + filename)
 
-                if 'Freqs' == featureMode:
-                    inFile = inFile[:, :, 0, :]
-                elif 'Mags' == featureMode:
-                    inFile = inFile[:, :, 1, :]
-                elif 'FirstFreq' == featureMode:
-                    inFile = inFile[:, 0, 0, :]
-                elif 'FirstMag' == featureMode:
-                    inFile = inFile[:, 0, 1, :]
+                inFile = featureSlicer(inFile, featureMode)
 
-                inFile = [inFile[x] for x in range(0, len(inFile), stepSize)]
+                inFile = sparseIt(inFile, stepSize)
+
                 batchX = np.reshape(inFile, (1, len(inFile), flattenedFeatures))
                 batchY = labelList[filename[:2]]
                 batchY = np.reshape(batchY, (1, numClasses))
@@ -177,45 +207,36 @@ for parameterLine in f.read().splitlines():
                 _, acc, mbloss, onehot_pred = sess.run([optimizer, accuracy, loss, logits],
                                                        feed_dict={x: batchX, y: batchY})
 
+                print('--Step %d/%d:' % (step+1, trainingSteps),
+                      'Duration= %s' % durationFormatter(datetime.now()-stepStart),
+                      'Shape= %s' % str(batchX.shape),
+                      'File= %s' % filename, flush=True)
                 loss_total += mbloss
                 acc_total += acc
 
             loses.append(loss_total)
             accur.append(acc_total/trainingSteps)
 
-            duration = datetime.now() - epochStart
-            dur_in_secs = duration.total_seconds()
-            days = divmod(dur_in_secs, 86400)  # Get days (without [0]!)
-            hours = divmod(days[1], 3600)  # Use remainder of days to calc hours
-            minutes = divmod(hours[1], 60)  # Use remainder of hours to calc minutes
-            seconds = divmod(minutes[1], 1)  # Use remainder of minutes to calc seconds
-            print(", Epoch Loss= " + "{:.4f}".format(loss_total) +
-                  ", Training Accuracy= " + "{:.3f}".format(acc_total/trainingSteps) +
-                  " Duration= %d days, %d hours, %d minutes, %d seconds" % (days[0], hours[0], minutes[0], seconds[0]),
-                  flush=True)
+            print('Epoch ' + str(e + 1) + ' Stats: Loss= ' + '{:.4f}'.format(loss_total) +
+                  ', Training Accuracy= ' + '{:.3f}'.format(acc_total/trainingSteps) +
+                  ' Duration= %s' % durationFormatter(datetime.now() - epochStart), flush=True)
 
         # Testing
         acc_total = 0
         for inpFl in inputs[-testSteps:]:
             inFile = loadData(folderInputs + inpFl)
 
-            if 'Freqs' == featureMode:
-                inFile = inFile[:, :, 0, :]
-            elif 'Mags' == featureMode:
-                inFile = inFile[:, :, 1, :]
-            elif 'FirstFreq' == featureMode:
-                inFile = inFile[:, 0, 0, :]
-            elif 'FirstMag' == featureMode:
-                inFile = inFile[:, 0, 1, :]
+            inFile = featureSlicer(inFile, featureMode)
 
-            inFile = [inFile[x] for x in range(0, len(inFile), stepSize)]
+            inFile = sparseIt(inFile, stepSize)
+
             batchX = np.reshape(inFile, (1, len(inFile), flattenedFeatures))
             batchY = labelList[inpFl[:2]]
             batchY = np.reshape(batchY, (1, numClasses))
 
             acc = sess.run(accuracy, feed_dict={x: batchX, y: batchY})
             acc_total += acc
-        print("Testing Accuracy:", acc_total/testSteps)
+        print('Testing Accuracy:', acc_total/testSteps)
         print('')
         print('')
 
