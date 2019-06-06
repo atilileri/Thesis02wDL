@@ -117,7 +117,7 @@ for parameterLine in confList:
                         labelList[label] = (labelCount * [0])
                         labelList[label].append(1)
                     print('.', end='', flush=True)
-                    inputs.append(filename)
+                    inputs.append((filename, inputFile[:]))
                 else:
                     print('?', end='')
 
@@ -196,8 +196,8 @@ for parameterLine in confList:
             acc_total = 0
             for step in range(0, trainingSteps):
                 stepStart = datetime.now()
-                filename = inputs[step]
-                inFile = loadData(folderInputs + filename)
+                filename = inputs[step][0]
+                inFile = inputs[step][1]
 
                 inFile = featureSlicer(inFile, featureMode)
 
@@ -229,14 +229,15 @@ for parameterLine in confList:
         # Testing
         acc_total = 0
         for inpFl in inputs[-testSteps:]:
-            inFile = loadData(folderInputs + inpFl)
+            filename = inpFl[0]
+            inFile = inpFl[1]
 
             inFile = featureSlicer(inFile, featureMode)
 
             inFile = sparseIt(inFile, stepSize)
 
             batchX = np.reshape(inFile, (1, len(inFile), flattenedFeatures))
-            batchY = labelList[inpFl[:2]]
+            batchY = labelList[filename[:2]]
             batchY = np.reshape(batchY, (1, numClasses))
 
             acc = sess.run(accuracy, feed_dict={x: batchX, y: batchY})
