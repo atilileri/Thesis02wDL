@@ -71,6 +71,7 @@ for parameterLine in confList:
     featureMode = parameters['featureMode']
     cellType = parameters['cellType']
     stepSize = parameters['stepSize']
+    printStep = parameters['printStep']
 
     print('================== lstmSparsed with stepSize:', stepSize, '================================================')
     print('Parameters:', parameters)
@@ -209,10 +210,12 @@ for parameterLine in confList:
                 _, acc, mbloss, onehot_pred = sess.run([optimizer, accuracy, loss, logits],
                                                        feed_dict={x: batchX, y: batchY})
 
-                print('--Step %d/%d:' % (step+1, trainingSteps),
-                      'Duration= %s' % durationFormatter(datetime.now()-stepStart),
-                      'Shape= %s' % str(batchX.shape),
-                      'File= %s' % filename, flush=True)
+                # print some steps in epoch (first, after -printStep- interval and last steps)
+                if 0 == ((step+1) % printStep) or 0 == step or trainingSteps == step+1:
+                    print('--Step %d/%d:' % (step+1, trainingSteps),
+                          'Duration= %s' % durationFormatter(datetime.now()-stepStart),
+                          'Shape= %s' % str(batchX.shape),
+                          'File= %s' % filename, flush=True)
                 loss_total += mbloss
                 acc_total += acc
 
