@@ -83,6 +83,7 @@ def fileReader(folder, shuffle=True, pad=True):
     if pad:
         inputFilesLocal = pad_sequences(inputFilesLocal, dtype='float64', padding='post')
 
+    # todo - ai : do this better way, more pythonic way
     for idx in range(len(inputFilesLocal)):
         inputsLocal.append((filenamesLocal[idx], inputFilesLocal[idx]))
 
