@@ -4,7 +4,7 @@ import os
 import numpy as np
 import sys
 from datetime import datetime
-
+from keras.preprocessing.sequence import pad_sequences
 
 # Loads data from file into variable
 def loadData(path):
@@ -53,6 +53,45 @@ def durationFormatter(dur):
     return '%d days, %d hours, %d minutes, %d seconds' % (days[0], hours[0], minutes[0], seconds[0])
 
 
+# prepare max length and file names
+def fileReader(folder, shuffle=True, pad=True):
+    labelListLocal = dict()
+    inputFilesLocal = list()
+    filenamesLocal = list()
+    inputsLocal = list()
+    print('Initial Scan. Classes:', end='')
+    for rootPath, directories, files in os.walk(folder):
+        for flname in sorted(files):
+            if '.inp2' in flname:
+                inputFile = loadData(rootPath + flname)
+                inputShape = np.shape(inputFile)
+                if inputShape[1:] == (4, 2, 9):  # todo - ai : fix all files, extract again
+                    label = flname[:2]
+                    if label not in labelListLocal:
+                        print('')
+                        print(label, end='')
+                        labelCount = len(labelListLocal)
+                        for l in labelListLocal:
+                            labelListLocal[l].append(0)
+                        labelListLocal[label] = (labelCount * [0])
+                        labelListLocal[label].append(1)
+                    print('.', end='', flush=True)
+                    inputFilesLocal.append(inputFile[:])
+                    filenamesLocal.append(flname)
+                else:
+                    print('?', end='')
+    if pad:
+        inputFilesLocal = pad_sequences(inputFilesLocal, dtype='float64', padding='post')
+
+    for idx in range(len(inputFilesLocal)):
+        inputsLocal.append((filenamesLocal[idx], inputFilesLocal[idx]))
+
+    if shuffle:
+        np.random.shuffle(inputsLocal)
+
+    return inputsLocal, labelListLocal
+
+
 # enable for file printing
 # sys.stdout = open('out.txt', 'a')
 
@@ -77,10 +116,6 @@ for parameterLine in confList:
     print('Parameters:', parameters)
     print('==================', datetime.now().strftime('%Y.%m.%d %H:%M:%S'), '===========================', flush=True)
 
-    inputs = []
-    maxSampleLen = 0  # timestep is how long is the file(samples in the file)
-    labelList = dict()
-
     if featureMode == 'All':
         numInput = [2, 9]  # input data size (9 inst freqs, 9 inst mags)
     elif featureMode in ['Freqs', 'Mags', 'FirstFreq', 'FirstMag']:
@@ -99,33 +134,11 @@ for parameterLine in confList:
 
     flattenedFeatures = channels*numInput[0]*numInput[1]
 
-    # prepare max length and file names
-    print('Initial Scan. Classes:', end='')
-    for rootPath, directories, files in os.walk(folderInputs):
-        for filename in sorted(files):
-            if '.inp2' in filename:
-                inputFile = loadData(rootPath + filename)
-                inputShape = np.shape(inputFile)
-                if inputShape[1:] == (4, 2, 9):  # todo - ai : fix all files, extract again
-                    label = filename[:2]
-                    if label not in labelList:
-                        print('')
-                        print(label, end='')
-                        labelCount = len(labelList)
-                        for l in labelList:
-                            labelList[l].append(0)
-                        labelList[label] = (labelCount * [0])
-                        labelList[label].append(1)
-                    print('.', end='', flush=True)
-                    inputs.append((filename, inputFile[:]))
-                else:
-                    print('?', end='')
-
+    inputs, labelList = fileReader(folderInputs)
+    
     print('')
     print('Total of ' + str(len(inputs)) + ' inputs loaded @ ' + folderInputs)
     print('Total of', len(labelList), 'classes')
-
-    np.random.shuffle(inputs)
 
     # train with 80% files, test with 20%
     totalOfInputs = len(inputs)
