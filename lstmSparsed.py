@@ -98,9 +98,11 @@ def fileReader(folder, shuffle=True, pad=True):
 
 f = open('conf.txt', 'r')
 confList = f.read().splitlines()
-print('Total of %d configurations will be run' % len(confList))
-for parameterLine in confList:
-    parameters = eval(parameterLine)
+f.close()
+totalConfigurationCount = len(confList)
+print('Total of %d configurations will be run' % totalConfigurationCount)
+for cIdx in range(len(confList)):
+    parameters = eval(confList[cIdx])
 
     folderInputs = parameters['inputFolder']
     learningRate = parameters['learningRate']
@@ -113,7 +115,8 @@ for parameterLine in confList:
     stepSize = parameters['stepSize']
     printStep = parameters['printStep']
 
-    print('================== lstmSparsed with stepSize:', stepSize, '================================================')
+    print('============ Config: %d/%d -> lstmSparsed with stepSize: %d ==============================================' %
+          (cIdx+1, totalConfigurationCount, stepSize))
     print('Parameters:', parameters)
     print('==================', datetime.now().strftime('%Y.%m.%d %H:%M:%S'), '===========================', flush=True)
 
@@ -264,4 +267,3 @@ for parameterLine in confList:
         # plt.show()
         # plt.plot(accur)
         # plt.show()
-f.close()
