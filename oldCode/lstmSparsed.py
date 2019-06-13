@@ -6,6 +6,7 @@ import sys
 from datetime import datetime
 from keras.preprocessing.sequence import pad_sequences
 
+
 # Loads data from file into variable
 def loadData(path):
     return pickle.load(open(path, 'rb'))
@@ -54,7 +55,7 @@ def durationFormatter(dur):
 
 
 # prepare max length and file names
-def fileReader(folder, shuffle=True, pad=True):
+def fileReader(folder, shuffle=True, pad=False):
     labelListLocal = dict()
     inputFilesLocal = list()
     filenamesLocal = list()
