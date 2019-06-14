@@ -10,8 +10,11 @@ from keras.layers import Activation
 from keras.layers.convolutional import Conv1D
 from keras import optimizers
 from keras import losses
-from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import train_test_split
+from sklearn.svm import LinearSVC
+from math import sqrt
+import gc
 
 fOut = None
 
@@ -19,7 +22,7 @@ fOut = None
 # Prints to both a file and console
 def myPrint(*args, mode='both', **kwargs):
     global fOut
-    if fOut is None:
+    if (fOut is None) and (mode in ['both', 'file']):
         outFileName = './outputs/out_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.txt'
         if not os.path.exists(os.path.dirname(outFileName)):
             os.makedirs(os.path.dirname(outFileName))
@@ -44,8 +47,9 @@ def reset_graph():
     backend.clear_session()
 
 
-# prepare input for 2 models
+# prepare input for given params
 def fileReader(folder, stepSz, featureM, shuffle=True, pad=True):
+    gc.collect()
     labelListLocal = dict()
     inputFilesLocal = list()
     filenamesLocal = list()
@@ -105,12 +109,15 @@ def fileReader(folder, stepSz, featureM, shuffle=True, pad=True):
             myPrint('.', end='', flush=True)
         myPrint('')
 
+    gc.collect()
     return inputFilesLocal, filenamesLocal, labelListLocal
 
 
 # function name is explanatory enough
-def trainTestModel(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, labelLst, losFnc, optim, learnRate):
+def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, labelLst, losFnc, optim, learnRate):
+    gc.collect()
     reset_graph()
+    myPrint('---LSTM Classifier---')
 
     trainShape = np.shape(xTraining)
     testShape = np.shape(xTesting)
@@ -126,7 +133,6 @@ def trainTestModel(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, la
     model.add(Activation('sigmoid'))
     # model.add(Conv1D(32, 24, strides=12))
     # model.add(Activation('sigmoid'))
-    # model.add(LSTM(64, return_sequences=True))
     # model.add(LSTM(64, return_sequences=True))
     model.add(LSTM(24, return_sequences=True))
     model.add(LSTM(12, return_sequences=False))
@@ -180,26 +186,33 @@ def trainTestModel(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, la
     myPrint('')
     myPrint('Training:')
     # Train
-    trainingResults = model.fit(xTraining, yTraining, epochs=trainingEpoch, batch_size=batchSz)
+    trainingResults = model.fit(xTraining, yTraining,
+                                epochs=trainingEpoch, batch_size=batchSz, validation_data=(xTesting, yTesting))
     # model.fit() function prints to console but we can not grab it as it is.
     # So myPrint it only to file with given info.
     for i in range(len(trainingResults.history['loss'])):
-        myPrint('Epoch #%d: Loss:%.4f, Accuracy:%.4f'
-                % (i+1, trainingResults.history['loss'][i], trainingResults.history['acc'][i]), mode='file')
+        myPrint('Epoch #%d: Loss:%.4f, Accuracy:%.4f Validation Loss:%.4f, Validation Accuracy:%.4f'
+                % (i+1, trainingResults.history['loss'][i], trainingResults.history['acc'][i],
+                   trainingResults.history['val_loss'][i], trainingResults.history['val_acc'][i]), mode='file')
 
     # Final evaluation of the model
     myPrint('')
     myPrint('Test:')
     scores = model.evaluate(xTesting, yTesting, batch_size=testSteps)
-    myPrint('Test Loss:%.4f, Accuracy:%.4f' % (scores[0], scores[1]))
+    myPrint('Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
 
     # Stats by class
-    Y_test = np.argmax(yTesting, axis=1)  # Convert one-hot to index
-    y_pred = model.predict_classes(xTesting)
+    yTesting = np.argmax(yTesting, axis=1)  # Convert one-hot to index
+    yTesting = [labelLst[i] for i in yTesting]
+    yPredict = model.predict_classes(xTesting)
+    yPredict = [labelLst[i] for i in yPredict]
     myPrint('Labels:', labelLst)
-    myPrint(classification_report(Y_test, y_pred))
+    myPrint('Confusion Matrix:')
+    myPrint(confusion_matrix(yTesting, yPredict, labels=labelLst))
+    myPrint('Classification Report:')
+    myPrint(classification_report(yTesting, yPredict, labels=labelLst))
 
-    # Detailed stats, sample by sample prints. Uncomment with caution :). Also variable names may be old.
+    # Detailed stats, sample by sample prints. Uncomment with caution :). Also variable names are old. Needs refactor.
     # fTest = filenames[-testSteps:]
     # yPred = model.predict_classes(xTest)
     # # yRat = model.predict(xTest)
@@ -215,6 +228,92 @@ def trainTestModel(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, la
     #         myPrint('-------')
     #     myPrint('Proba= %s' % yProba[i])
     #     # myPrint("Ratios=%s" % yRat[i])
+    del xTraining
+    del xTesting
+    del yTraining
+    del yTesting
+    del labelLst
+    del model
+    gc.collect()
+
+
+# A function to find largest prime factor
+def maxPrimeFactors(n):
+    # Initialize the maximum prime factor variable with the lowest one
+    maxPrime = -1
+
+    # Print the number of 2s that divide n
+    while n % 2 == 0:
+        maxPrime = 2
+        n >>= 1  # equivalent to n /= 2
+
+    # n must be odd at this point, thus skip the even numbers and iterate only for odd integers
+    for i in range(3, int(sqrt(n)) + 1, 2):
+        while n % i == 0:
+            maxPrime = i
+            n = n / i
+
+    # This condition is to handle the case when n is a prime number greater than 2
+    if n > 2:
+        maxPrime = n
+
+    return int(maxPrime)
+
+
+def trainTestSVM(xTraining, xTesting, yTraining, yTesting, labelLst):
+    gc.collect()
+    myPrint('---SVM Classifier---')
+
+    myPrint('Original Train Batch:', np.shape(xTraining))
+    myPrint('Original Test Batch:', np.shape(xTesting))
+
+    # prepare data for SVM
+    yTraining = np.argmax(yTraining, axis=1)
+    yTesting = np.argmax(yTesting, axis=1)
+    shape = np.shape(xTraining)
+    divisor = maxPrimeFactors(shape[1])
+    myPrint('Divisor:', divisor)
+    distribute = shape[1] // divisor
+    # todo - ai : shuffle data
+    xTraining = np.reshape(xTraining, (-1, shape[-1]*distribute))
+    xTesting = np.reshape(xTesting, (-1, shape[-1]*distribute))
+
+    yTrn = list()
+    for y in yTraining:
+        yTrn.extend([y] * divisor)
+    del yTraining
+    yTst = list()
+    for y in yTesting:
+        yTst.extend([y] * divisor)
+    del yTesting
+
+    myPrint('Mini-Batched Train Batch:', np.shape(xTraining))
+    myPrint('Mini-Batched Test Batch:', np.shape(xTesting))
+
+    model = LinearSVC(verbose=True)
+    myPrint('')
+    myPrint('Training...')
+    model.fit(xTraining, yTrn)
+
+    myPrint('')
+    myPrint('Testing...')
+    yPredict = model.predict(xTesting)
+
+    myPrint('Test Accuracy:', model.score(xTesting, yTst))
+    yTst = [labelLst[i] for i in yTst]
+    yPredict = [labelLst[i] for i in yPredict]
+    myPrint('Labels:', labelLst)
+    myPrint('Confusion Matrix:')
+    myPrint(confusion_matrix(yTst, yPredict, labels=labelLst))
+    myPrint('Classification Report:')
+    myPrint(classification_report(yTst, yPredict, labels=labelLst))
+
+    del xTraining
+    del xTesting
+    del yTrn
+    del yTst
+    del labelLst
+    gc.collect()
 
 
 # ===================================== MAIN STARTS HERE. FUNCTIONS ARE ABOVE =====================================
@@ -229,8 +328,8 @@ fConf.close()
 totalConfigurationCount = len(confList)
 myPrint('Total of %d configuration(s) will be run' % totalConfigurationCount)
 for cIdx in range(len(confList)):
+    gc.collect()
     parameters = eval(confList[cIdx])
-
     folderInputs = parameters['inputFolder']
     trainingEpoch = parameters['trainingEpoch']
     featureMode = parameters['featureMode']
@@ -239,6 +338,7 @@ for cIdx in range(len(confList)):
     learningRate = parameters['learningRate']
     lossFunction = parameters['lossFunction']
     optimizer = parameters['optimizer']
+    clsModel = parameters['clsModel']
 
     myPrint('============ Config: %d/%d -> lstmKeras with stepSize: %d ==============================================' %
             (cIdx+1, totalConfigurationCount, stepSize))
@@ -273,21 +373,32 @@ for cIdx in range(len(confList)):
     # train with 80%(minus remainder of batchSize) of files, test with 20%
     totalOfInputs = len(inputs)
     trainingSteps = int(totalOfInputs * 0.8)
+    if 0 == batchSize:
+        batchSize = trainingSteps
     trainingSteps -= (trainingSteps % batchSize)  # for better fit of train size, not necessary.
     testSteps = totalOfInputs - trainingSteps
-    myPrint(trainingSteps, 'steps or training,', testSteps, 'steps for test')
+    myPrint(trainingSteps, 'steps for training,', testSteps, 'steps for test')
 
     # create labels for inputs
     labels = list()
-    for fConf in filenames:
-        labels.append(labelList[fConf[:2]])
+    for f in filenames:
+        labels.append(labelList[f[:2]])
 
+    myPrint('Splitting Train and Test Data...')
     xTrain, xTest, yTrain, yTest = train_test_split(np.asarray(inputs), np.asarray(labels),
                                                     stratify=labels, train_size=trainingSteps, test_size=testSteps)
 
     myPrint('------Model for %s------' % featureMode)
-    trainTestModel(xTrain, xTest, yTrain, yTest, numClasses, batchSize, list(labelList.keys()),
-                   lossFunction, optimizer, learningRate)
+    # todo - ai : Param 'Both' causes probable memory error: Process finished with exit code -1073741819 (0xC0000005)
+    if clsModel in ['LSTM', 'Both']:
+        # Classify with Keras LSTM Model
+        trainTestLSTM(xTrain, xTest, yTrain, yTest, numClasses, batchSize, list(labelList.keys()),
+                      lossFunction, optimizer, learningRate)
+    gc.collect()
+    if clsModel in ['SVM', 'Both']:
+        # Classify with SkLearn SVM Model
+        trainTestSVM(xTrain, xTest, yTrain, yTest, list(labelList.keys()))
+    gc.collect()
 
     # # todo - ai : try concatanating on Mags and Freqs on axis 2, may be this can give better accuracy. Try!
     # # todo cont.: remove duplicating y labels. My GPU is not enough :)
@@ -298,7 +409,17 @@ for cIdx in range(len(confList)):
     # yTesting = np.concatenate((yTesting, yTesting), axis=0)
     #
     # myPrint('------Model for All------')
-    # trainTestModel(xTrainAll, xTestAll, yTraining, yTesting, numClasses)
+    # trainTestLSTM(xTrainAll, xTestAll, yTraining, yTesting, numClasses)
+
+    del xTrain
+    del yTrain
+    del xTest
+    del yTest
+    del inputs
+    del labelList
+    del filenames
+    del labels
+    gc.collect()
 
 if fOut is not None:
     fOut.close()

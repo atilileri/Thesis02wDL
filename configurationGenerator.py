@@ -11,11 +11,12 @@ featureModes = ['Mags']
 trainingEpochs = [400]
 stepSizes = [4]
 batchSizes = [512]
-learningRates = [0.001, 0.002]
+learningRates = [0.001, 0.003, 0.005]
 # lossFunctions = ['CatCrosEnt', 'KLDiv']
 lossFunctions = ['CatCrosEnt']
-# optimizers = ['Adam', 'Sgd', 'SgdNest', 'Adamax', 'Nadam', 'Rms']
-optimizers = ['Adam']
+optimizers = ['Adam', 'Sgd', 'SgdNest', 'Adamax', 'Nadam', 'Rms']
+# optimizers = ['Adam']
+models = ['LSTM', 'SVM']
 
 countLimit = 0
 
@@ -29,16 +30,18 @@ for inp in inputFolders:
                     for lr in learningRates:
                         for lf in lossFunctions:
                             for o in optimizers:
-                                parameters = dict()
-                                parameters['inputFolder'] = inp
-                                parameters['featureMode'] = fm
-                                parameters['trainingEpoch'] = te
-                                parameters['stepSize'] = ss
-                                parameters['batchSize'] = bs
-                                parameters['learningRate'] = lr
-                                parameters['lossFunction'] = lf
-                                parameters['optimizer'] = o
-                                listOfParams.append(parameters.copy())
+                                for m in models:
+                                    parameters = dict()
+                                    parameters['inputFolder'] = inp
+                                    parameters['featureMode'] = fm
+                                    parameters['trainingEpoch'] = te
+                                    parameters['stepSize'] = ss
+                                    parameters['batchSize'] = bs
+                                    parameters['learningRate'] = lr
+                                    parameters['lossFunction'] = lf
+                                    parameters['optimizer'] = o
+                                    parameters['clsModel'] = m
+                                    listOfParams.append(parameters.copy())
 if 0 < countLimit:
     for i in range(countLimit):
         print(random.choice(listOfParams), file=f)
