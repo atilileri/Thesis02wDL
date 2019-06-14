@@ -274,7 +274,7 @@ def trainTestSVM(xTraining, xTesting, yTraining, yTesting, labelLst):
     divisor = maxPrimeFactors(shape[1])
     myPrint('Divisor:', divisor)
     distribute = shape[1] // divisor
-    # todo - ai : shuffle data
+    # todo - ai : shuffle data may be needed
     xTraining = np.reshape(xTraining, (-1, shape[-1]*distribute))
     xTesting = np.reshape(xTesting, (-1, shape[-1]*distribute))
 
