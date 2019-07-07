@@ -126,6 +126,7 @@ def fileReader(folder, stepSz, featureM, shuffle=True, pad=True, inputType='inp'
                     filenamesLocal.append(flname)
         else:
             myPrint('ERROR: Valid input type extensions for file read: "inp2" | "wav"')
+            return
     myPrint('')
     myPrint('%d Files with %d Label(s): %s.' % (len(inputFilesLocal), len(labelListLocal), list(labelListLocal.keys())))
     if pad:
@@ -354,6 +355,7 @@ fConf = open('conf.txt', 'r')
 confList = fConf.read().splitlines()
 fConf.close()
 totalConfigurationCount = len(confList)
+# todo - ai : maybe each config run as individual script. Try coding confRunner and see memory on multiple conf lines.
 myPrint('Total of %d configuration(s) will be run' % totalConfigurationCount)
 for cIdx in range(len(confList)):
     gc.collect()
