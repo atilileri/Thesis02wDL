@@ -15,6 +15,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import LinearSVC
 from math import sqrt
 import gc
+import scipy.io.wavfile
 
 fOut = None
 
@@ -48,7 +49,7 @@ def reset_graph():
 
 
 # prepare input for given params
-def fileReader(folder, stepSz, featureM, shuffle=True, pad=True):
+def fileReader(folder, stepSz, featureM, shuffle=True, pad=True, inputType='inp'):
     gc.collect()
     labelListLocal = dict()
     inputFilesLocal = list()
@@ -60,11 +61,49 @@ def fileReader(folder, stepSz, featureM, shuffle=True, pad=True):
             myPrint('Shuffling...')
             np.random.shuffle(files)
         myPrint('Reading:', end='')
-        for flname in files:
-            if '.inp2' in flname:
-                inputFile = loadData(rootPath + flname)
-                inpShape = np.shape(inputFile)
-                if inpShape[1:] == (4, 2, 9):
+        if 'inp2' == inputType:
+            for flname in files:
+                if '.'+inputType in flname:
+                    inputFile = loadData(rootPath + flname)
+                    inpShape = np.shape(inputFile)
+                    if inpShape[1:] == (4, 2, 9):
+                        label = flname[:2]
+                        if label not in labelListLocal:
+                            labelCount = len(labelListLocal)
+                            for l in labelListLocal:
+                                labelListLocal[l].append(0)
+                            labelListLocal[label] = (labelCount * [0])
+                            labelListLocal[label].append(1)
+                        myPrint('.', end='', flush=True)
+
+                        # decimate by stepSize
+                        if stepSz > 1:
+                            inputFile = inputFile[::stepSz]
+
+                        # find max len
+                        seqLen = len(inputFile)
+                        maxlen = max(seqLen, maxlen)
+
+                        # seperate out only wanted feature
+                        if 'Mags' == featureM:
+                            inputFile = inputFile[:, :, 1, :]
+                        elif 'Freqs' == featureM:
+                            inputFile = inputFile[:, :, 0, :]
+                        else:
+                            myPrint('ERROR: Valid features for file read: "Mags" | "Freqs"')
+                            return
+                        # flatten
+                        inputFile = np.reshape(inputFile, (seqLen, -1))
+
+                        # append each item to their lists
+                        inputFilesLocal.append(inputFile)
+                        filenamesLocal.append(flname)
+                    else:
+                        myPrint('?', end='')
+        elif 'wav' == inputType:
+            for flname in files:
+                if '.'+inputType in flname:
+                    _, wavFile = scipy.io.wavfile.read(rootPath + flname)
                     label = flname[:2]
                     if label not in labelListLocal:
                         labelCount = len(labelListLocal)
@@ -76,28 +115,17 @@ def fileReader(folder, stepSz, featureM, shuffle=True, pad=True):
 
                     # decimate by stepSize
                     if stepSz > 1:
-                        inputFile = inputFile[::stepSz]
+                        wavFile = wavFile[::stepSz]
 
                     # find max len
-                    seqLen = len(inputFile)
+                    seqLen = len(wavFile)
                     maxlen = max(seqLen, maxlen)
 
-                    # seperate out only wanted feature
-                    if 'Mags' == featureM:
-                        inputFile = inputFile[:, :, 1, :]
-                    elif 'Freqs' == featureM:
-                        inputFile = inputFile[:, :, 0, :]
-                    else:
-                        myPrint('ERROR: Valid features for file read: "Mags" | "Freqs"')
-                        return
-                    # flatten
-                    inputFile = np.reshape(inputFile, (seqLen, -1))
-
                     # append each item to their lists
-                    inputFilesLocal.append(inputFile)
+                    inputFilesLocal.append(wavFile)
                     filenamesLocal.append(flname)
-                else:
-                    myPrint('?', end='')
+        else:
+            myPrint('ERROR: Valid input type extensions for file read: "inp2" | "wav"')
     myPrint('')
     myPrint('%d Files with %d Label(s): %s.' % (len(inputFilesLocal), len(labelListLocal), list(labelListLocal.keys())))
     if pad:
@@ -346,10 +374,10 @@ for cIdx in range(len(confList)):
     myPrint('==================', datetime.now().strftime('%Y.%m.%d %H:%M:%S'), '=========================', flush=True)
 
     # use this for random shuffling. use temp data for tests only. read explanations below
-    inputs, filenames, labelList = fileReader(folderInputs, stepSize, featureMode)
+    inputs, filenames, labelList = fileReader(folderInputs, stepSize, featureMode, inputType='inp2')
 
     # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
-    # Best found way for comparing network performances
+    # Best found way for comparing performances of different network variations
     # input('Before. Press ENTER to continue:')
     # # save temp data (run fileReader() with uncommenting below, only once for saving random data)
     # saveData(inputsMags, 'C:/Users/atil/Desktop/tempDataStore/inputsMags.dat')
