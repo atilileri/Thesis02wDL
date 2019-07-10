@@ -6,7 +6,7 @@ import random
 # inputFolders = ['E:/atil/BreathDataset/Processed/inputsFrom_max_sample_set/']
 
 inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/']
-# featureModes = ['Freqs', 'Mags']
+# featureModes = ['Freqs', 'Mags', 'Wav']
 featureModes = ['Mags']
 trainingEpochs = [400]
 stepSizes = [4]

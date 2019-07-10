@@ -1,1 +1,1 @@
-{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/', 'featureMode': 'Mags', 'trainingEpoch': 500, 'stepSize': 4, 'batchSize': 512, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt', 'optimizer': 'Adam', 'clsModel': 'LSTM'}
+{'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/', 'featureMode': 'Mags', 'trainingEpoch': 2, 'stepSize': 40, 'batchSize': 512, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt', 'optimizer': 'Adam', 'clsModel': 'LSTM'}

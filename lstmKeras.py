@@ -16,6 +16,7 @@ from sklearn.svm import LinearSVC
 from math import sqrt
 import gc
 import scipy.io.wavfile
+import tensorflow as tf
 
 fOut = None
 
@@ -34,6 +35,15 @@ def myPrint(*args, mode='both', **kwargs):
         print(*args, **kwargs)
 
 
+def durToStr(dur):
+    dur_in_secs = dur.total_seconds()
+    days = divmod(dur_in_secs, 86400)  # Get days (without [0]!)
+    hours = divmod(days[1], 3600)  # Use remainder of days to calc hours
+    minutes = divmod(hours[1], 60)  # Use remainder of hours to calc minutes
+    seconds = divmod(minutes[1], 1)  # Use remainder of minutes to calc seconds
+    return '%d days, %d hours, %d minutes, %d seconds' % (days[0], hours[0], minutes[0], seconds[0])
+
+
 # Loads data from file into variable
 def loadData(path):
     return pickle.load(open(path, 'rb'))
@@ -44,12 +54,13 @@ def saveData(data, path):
     pickle.dump(data, open(path, "wb"))
 
 
-def reset_graph():
+def clearGPU():
     backend.clear_session()
+    tf.reset_default_graph()
 
 
 # prepare input for given params
-def fileReader(folder, stepSz, featureM, shuffle=True, pad=True, inputType='inp'):
+def fileReader(folder, stepSz, featureM, shuffle=True, pad=True):
     gc.collect()
     labelListLocal = dict()
     inputFilesLocal = list()
@@ -61,49 +72,14 @@ def fileReader(folder, stepSz, featureM, shuffle=True, pad=True, inputType='inp'
             myPrint('Shuffling...')
             np.random.shuffle(files)
         myPrint('Reading:', end='')
-        if 'inp2' == inputType:
-            for flname in files:
-                if '.'+inputType in flname:
+        for flname in files:
+            if ('.inp2' in flname and 'Wav' != featureM) or ('.wav' in flname and 'Wav' == featureM):
+                if 'Wav' == featureM:
+                    _, inputFile = scipy.io.wavfile.read(rootPath + flname)
+                else:
                     inputFile = loadData(rootPath + flname)
-                    inpShape = np.shape(inputFile)
-                    if inpShape[1:] == (4, 2, 9):
-                        label = flname[:2]
-                        if label not in labelListLocal:
-                            labelCount = len(labelListLocal)
-                            for l in labelListLocal:
-                                labelListLocal[l].append(0)
-                            labelListLocal[label] = (labelCount * [0])
-                            labelListLocal[label].append(1)
-                        myPrint('.', end='', flush=True)
-
-                        # decimate by stepSize
-                        if stepSz > 1:
-                            inputFile = inputFile[::stepSz]
-
-                        # find max len
-                        seqLen = len(inputFile)
-                        maxlen = max(seqLen, maxlen)
-
-                        # seperate out only wanted feature
-                        if 'Mags' == featureM:
-                            inputFile = inputFile[:, :, 1, :]
-                        elif 'Freqs' == featureM:
-                            inputFile = inputFile[:, :, 0, :]
-                        else:
-                            myPrint('ERROR: Valid features for file read: "Mags" | "Freqs"')
-                            return
-                        # flatten
-                        inputFile = np.reshape(inputFile, (seqLen, -1))
-
-                        # append each item to their lists
-                        inputFilesLocal.append(inputFile)
-                        filenamesLocal.append(flname)
-                    else:
-                        myPrint('?', end='')
-        elif 'wav' == inputType:
-            for flname in files:
-                if '.'+inputType in flname:
-                    _, wavFile = scipy.io.wavfile.read(rootPath + flname)
+                inpShape = np.shape(inputFile)
+                if 'Wav' == featureM or inpShape[1:] == (4, 2, 9):
                     label = flname[:2]
                     if label not in labelListLocal:
                         labelCount = len(labelListLocal)
@@ -115,18 +91,30 @@ def fileReader(folder, stepSz, featureM, shuffle=True, pad=True, inputType='inp'
 
                     # decimate by stepSize
                     if stepSz > 1:
-                        wavFile = wavFile[::stepSz]
+                        inputFile = inputFile[::stepSz]
 
                     # find max len
-                    seqLen = len(wavFile)
+                    seqLen = len(inputFile)
                     maxlen = max(seqLen, maxlen)
 
+                    # seperate out only wanted feature
+                    if 'Mags' == featureM:
+                        inputFile = inputFile[:, :, 1, :]
+                    elif 'Freqs' == featureM:
+                        inputFile = inputFile[:, :, 0, :]
+                    elif 'Wav' == featureM:
+                        pass
+                    else:
+                        myPrint('ERROR: Invalid feature mode for file read:', featureM)
+                        return
+                    # flatten
+                    inputFile = np.reshape(inputFile, (seqLen, -1))
+
                     # append each item to their lists
-                    inputFilesLocal.append(wavFile)
+                    inputFilesLocal.append(inputFile)
                     filenamesLocal.append(flname)
-        else:
-            myPrint('ERROR: Valid input type extensions for file read: "inp2" | "wav"')
-            return
+                else:
+                    myPrint('?', end='')
     myPrint('')
     myPrint('%d Files with %d Label(s): %s.' % (len(inputFilesLocal), len(labelListLocal), list(labelListLocal.keys())))
     if pad:
@@ -143,9 +131,10 @@ def fileReader(folder, stepSz, featureM, shuffle=True, pad=True, inputType='inp'
 
 
 # function name is explanatory enough
-def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, labelLst, losFnc, optim, learnRate):
+def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, batchSz, labelLst, losFnc, optim,
+                  learnRate):
     gc.collect()
-    reset_graph()
+    clearGPU()
     myPrint('---LSTM Classifier---')
 
     trainShape = np.shape(xTraining)
@@ -216,7 +205,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, lab
     myPrint('Training:')
     # Train
     trainingResults = model.fit(xTraining, yTraining,
-                                epochs=trainingEpoch, batch_size=batchSz, validation_data=(xTesting, yTesting))
+                                epochs=trainEpoch, batch_size=batchSz, validation_data=(xTesting, yTesting))
     # model.fit() function prints to console but we can not grab it as it is.
     # So myPrint it only to file with given info.
     for i in range(len(trainingResults.history['loss'])):
@@ -227,7 +216,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, lab
     # Final evaluation of the model
     myPrint('')
     myPrint('Test:')
-    scores = model.evaluate(xTesting, yTesting, batch_size=testSteps)
+    scores = model.evaluate(xTesting, yTesting, batch_size=testShape[0])
     myPrint('Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
 
     # Stats by class
@@ -257,6 +246,9 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, lab
     #         myPrint('-------')
     #     myPrint('Proba= %s' % yProba[i])
     #     # myPrint("Ratios=%s" % yRat[i])
+
+    clearGPU()
+    gc.collect()
     del xTraining
     del xTesting
     del yTraining
@@ -264,6 +256,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, batchSz, lab
     del labelLst
     del model
     gc.collect()
+    clearGPU()
 
 
 # A function to find largest prime factor
@@ -345,21 +338,7 @@ def trainTestSVM(xTraining, xTesting, yTraining, yTesting, labelLst):
     gc.collect()
 
 
-# ===================================== MAIN STARTS HERE. FUNCTIONS ARE ABOVE =====================================
-
-# enable for capturing console to file (does not print to console this way, but captures all stdout from other libs too)
-# myPrint() function on the other hand, writes to both console and file, but does not capture stdout
-# sys.stdout = open('out.txt', 'a')
-
-fConf = open('conf.txt', 'r')
-confList = fConf.read().splitlines()
-fConf.close()
-totalConfigurationCount = len(confList)
-# todo - ai : maybe each config run as individual script. Try coding confRunner and see memory on multiple conf lines.
-myPrint('Total of %d configuration(s) will be run' % totalConfigurationCount)
-for cIdx in range(len(confList)):
-    gc.collect()
-    parameters = eval(confList[cIdx])
+def runConfig(parameters):
     folderInputs = parameters['inputFolder']
     trainingEpoch = parameters['trainingEpoch']
     featureMode = parameters['featureMode']
@@ -370,26 +349,19 @@ for cIdx in range(len(confList)):
     optimizer = parameters['optimizer']
     clsModel = parameters['clsModel']
 
-    myPrint('============ Config: %d/%d -> lstmKeras with stepSize: %d ==============================================' %
-            (cIdx+1, totalConfigurationCount, stepSize))
-    myPrint('Parameters:', parameters)
-    myPrint('==================', datetime.now().strftime('%Y.%m.%d %H:%M:%S'), '=========================', flush=True)
-
-    # use this for random shuffling. use temp data for tests only. read explanations below
-    inputs, filenames, labelList = fileReader(folderInputs, stepSize, featureMode, inputType='inp2')
+    # use fileReader() for random shuffling every iteration. use some temp data for tests only. read explanations below
+    inputs, filenames, labelList = fileReader(folderInputs, stepSize, featureMode)
 
     # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
     # Best found way for comparing performances of different network variations
     # input('Before. Press ENTER to continue:')
     # # save temp data (run fileReader() with uncommenting below, only once for saving random data)
     # saveData(inputsMags, 'C:/Users/atil/Desktop/tempDataStore/inputsMags.dat')
-    # saveData(inputsFreqs, 'C:/Users/atil/Desktop/tempDataStore/inputsFreqs.dat')
     # saveData(filenames, 'C:/Users/atil/Desktop/tempDataStore/filenames.dat')
     # saveData(labelList, 'C:/Users/atil/Desktop/tempDataStore/labelList.dat')
 
     # # load from temp data (uncomment below for loading, comment out fileReader() function)
     # inputsMags = loadData('C:/Users/atil/Desktop/tempDataStore/inputsMags.dat')
-    # inputsFreqs = loadData('C:/Users/atil/Desktop/tempDataStore/inputsFreqs.dat')
     # filenames = loadData('C:/Users/atil/Desktop/tempDataStore/filenames.dat')
     # labelList = loadData('C:/Users/atil/Desktop/tempDataStore/labelList.dat')
     # input('After. Press ENTER to continue:')
@@ -422,7 +394,7 @@ for cIdx in range(len(confList)):
     # todo - ai : Param 'Both' causes probable memory error: Process finished with exit code -1073741819 (0xC0000005)
     if clsModel in ['LSTM', 'Both']:
         # Classify with Keras LSTM Model
-        trainTestLSTM(xTrain, xTest, yTrain, yTest, numClasses, batchSize, list(labelList.keys()),
+        trainTestLSTM(xTrain, xTest, yTrain, yTest, numClasses, trainingEpoch, batchSize, list(labelList.keys()),
                       lossFunction, optimizer, learningRate)
     gc.collect()
     if clsModel in ['SVM', 'Both']:
@@ -449,6 +421,36 @@ for cIdx in range(len(confList)):
     del labelList
     del filenames
     del labels
+    gc.collect()
+
+
+# ===================================== MAIN STARTS HERE. FUNCTIONS ARE ABOVE =====================================
+
+# enable for capturing console to file (does not print to console this way, but captures all stdout from other libs too)
+# myPrint() function on the other hand, writes to both console and file, but does not capture stdout
+# sys.stdout = open('out.txt', 'a')
+
+fConf = open('conf.txt', 'r')
+configList = fConf.read().splitlines()
+fConf.close()
+totalConfigurationCount = len(configList)
+myPrint('Total of %d configuration(s) will be run' % totalConfigurationCount)
+for cIdx in range(totalConfigurationCount):
+    gc.collect()
+    parameterList = eval(configList[cIdx])
+    startTime = datetime.now()
+    myPrint('============ Config: %d/%d === Start Time: %s =======================================' %
+            (cIdx+1, totalConfigurationCount, startTime.strftime('%Y.%m.%d %H:%M:%S')))
+    myPrint('Parameters:', parameterList)
+
+    runConfig(parameterList)
+
+    endTime = datetime.now()
+    myPrint('============ Config: %d/%d === End Time: %s =========================================' %
+            (cIdx+1, totalConfigurationCount, endTime.strftime('%Y.%m.%d %H:%M:%S')))
+    myPrint('============ Config: %d/%d === Duration: %s =====================' %
+            (cIdx + 1, totalConfigurationCount, durToStr(endTime - startTime)))
+    myPrint('', flush=True)
     gc.collect()
 
 if fOut is not None:
