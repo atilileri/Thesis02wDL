@@ -1,5 +1,6 @@
 import pickle
 import os
+import sys
 import numpy as np
 from datetime import datetime
 from keras import backend
@@ -16,7 +17,6 @@ from sklearn.svm import LinearSVC
 from math import sqrt
 import gc
 import scipy.io.wavfile
-import tensorflow as tf
 
 fOut = None
 
@@ -56,16 +56,15 @@ def saveData(data, path):
 
 def clearGPU():
     backend.clear_session()
-    tf.reset_default_graph()
 
 
 # prepare input for given params
-def fileReader(folder, stepSz, featureM, shuffle=True, pad=True):
+def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True, pad=True):
     gc.collect()
-    labelListLocal = dict()
+    labelDictLocal = dict()
+    labelListLocal = list()
     inputFilesLocal = list()
-    filenamesLocal = list()
-    maxlen = 0
+    maxLen = 0
     myPrint('Initial Scan.')
     for rootPath, directories, files in os.walk(folder):
         if shuffle:
@@ -73,66 +72,112 @@ def fileReader(folder, stepSz, featureM, shuffle=True, pad=True):
             np.random.shuffle(files)
         myPrint('Reading:', end='')
         for flname in files:
-            if ('.inp2' in flname and 'Wav' != featureM) or ('.wav' in flname and 'Wav' == featureM):
+            if ('.imfFeat' in flname and featureM in ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh']) or \
+                    ('.wav' in flname and featureM in ['Wav']) or \
+                    ('.specto' in flname and featureM in ['Specto']):
+                # read file
                 if 'Wav' == featureM:
                     _, inputFile = scipy.io.wavfile.read(rootPath + flname)
                 else:
                     inputFile = loadData(rootPath + flname)
-                inpShape = np.shape(inputFile)
-                if 'Wav' == featureM or inpShape[1:] == (4, 2, 9):
-                    label = flname[:2]
-                    if label not in labelListLocal:
-                        labelCount = len(labelListLocal)
-                        for l in labelListLocal:
-                            labelListLocal[l].append(0)
-                        labelListLocal[label] = (labelCount * [0])
-                        labelListLocal[label].append(1)
-                    myPrint('.', end='', flush=True)
 
-                    # decimate by stepSize
-                    if stepSz > 1:
-                        inputFile = inputFile[::stepSz]
-
-                    # find max len
-                    seqLen = len(inputFile)
-                    maxlen = max(seqLen, maxlen)
-
-                    # seperate out only wanted feature
-                    if 'Mags' == featureM:
-                        inputFile = inputFile[:, :, 1, :]
-                    elif 'Freqs' == featureM:
-                        inputFile = inputFile[:, :, 0, :]
-                    elif 'Wav' == featureM:
-                        pass
-                    else:
-                        myPrint('ERROR: Invalid feature mode for file read:', featureM)
-                        return
-                    # flatten
-                    inputFile = np.reshape(inputFile, (seqLen, -1))
-
-                    # append each item to their lists
-                    inputFilesLocal.append(inputFile)
-                    filenamesLocal.append(flname)
+                # read labels
+                if 'Speaker' == classificationM:
+                    label = flname[0:2]
+                elif 'Posture' == classificationM:
+                    label = flname[2:4]
                 else:
-                    myPrint('?', end='')
-    myPrint('')
-    myPrint('%d Files with %d Label(s): %s.' % (len(inputFilesLocal), len(labelListLocal), list(labelListLocal.keys())))
+                    myPrint('ERROR: Invalid classification mode:', classificationM)
+                    return
+                labelListLocal.append(label)
+                if label not in labelDictLocal:
+                    labelCount = len(labelDictLocal)
+                    for l in labelDictLocal:
+                        labelDictLocal[l].append(0)
+                    labelDictLocal[label] = (labelCount * [0])
+                    labelDictLocal[label].append(1)
+                myPrint('.', end='', flush=True)
+
+                # decimate by stepSize
+                if stepSz > 1 and 'Specto' != featureM:
+                    inputFile = inputFile[::stepSz]
+
+                # update max length
+                seqLen = len(inputFile)
+                maxLen = max(seqLen, maxLen)
+
+                # seperate out only wanted channel(s)
+                chnSlice = None
+                if 0 <= channelM <= 3:
+                    chnSlice = channelM  # index: [0-3] channel (without losing axis count)
+                elif 4 == channelM:
+                    pass
+                else:
+                    myPrint('ERROR: Invalid channel mode for file read:', channelM)
+                    return
+
+                # seperate out only wanted feature(s)
+                featSlice = None
+                if 'Freqs' == featureM:
+                    featSlice = 0  # index: 0 (without losing axis count)
+                elif 'Mags' == featureM:
+                    featSlice = 1  # index: 1 (without losing axis count)
+                elif 'Phases' == featureM:
+                    featSlice = 2  # index: 2 (without losing axis count)
+                elif 'FrMg' == featureM:
+                    featSlice = slice(0, 2)  # indexes: 0,1
+                elif 'MgPh' == featureM:
+                    featSlice = slice(1, 3)  # indexes: 1,2
+                elif 'FrPh' == featureM:
+                    featSlice = slice(0, 3, 2)  # indexes: 0,2
+                elif featureM in ['Wav', 'Specto', 'FrMgPh']:
+                    pass
+                else:
+                    myPrint('ERROR: Invalid feature mode for file read:', featureM)
+                    return
+
+                # apply seperation
+                if (chnSlice is not None) and (featSlice is not None):
+                    inputFile = inputFile[:, chnSlice, featSlice, :]
+                elif (chnSlice is not None) and (featSlice is None):
+                    inputFile = inputFile[:, chnSlice, ...]
+                elif (chnSlice is None) and (featSlice is not None):
+                    inputFile = inputFile[:, :, featSlice, :]
+                else:
+                    pass  # No slicing needed
+
+                # flatten
+                inputFile = np.reshape(inputFile, (seqLen, -1))
+
+                # append each item to their lists
+                inputFilesLocal.append(inputFile.copy())
+
+                del inputFile
+                gc.collect()
+
+    myPrint('')  # for new line
+    myPrint('Generating Labels...')
+    # regenerate label list from final label dict as one-hot vector form
+    for i in range(len(labelListLocal)):
+        labelListLocal[i] = labelDictLocal[labelListLocal[i]]
+
+    myPrint('%d Files with %d Label(s): %s.' % (len(inputFilesLocal), len(labelDictLocal), list(labelDictLocal.keys())))
     if pad:
         myPrint('Padding:', end='')
         for i in range(len(inputFilesLocal)):
             seqLen = len(inputFilesLocal[i])
-            diff = maxlen - seqLen
+            diff = maxLen - seqLen
             inputFilesLocal[i] = np.pad(inputFilesLocal[i], ((0, diff), (0, 0)), mode='constant', constant_values=0)
             myPrint('.', end='', flush=True)
         myPrint('')
 
     gc.collect()
-    return inputFilesLocal, filenamesLocal, labelListLocal
+    return inputFilesLocal, labelListLocal, labelDictLocal
 
 
 # function name is explanatory enough
 def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, batchSz, labelLst, losFnc, optim,
-                  learnRate):
+                  learnRate, featMode):
     gc.collect()
     clearGPU()
     myPrint('---LSTM Classifier---')
@@ -144,15 +189,15 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
 
     # create the model
     model = Sequential()
-    # model.add(Embedding(top_words, embedding_vecor_length, input_length=max_review_length))
-    model.add(Conv1D(8, 48, strides=48, input_shape=trainShape[1:]))
-    model.add(Activation('relu'))
-    model.add(Conv1D(16, 24, strides=24))
-    model.add(Activation('sigmoid'))
-    # model.add(Conv1D(32, 24, strides=12))
-    # model.add(Activation('sigmoid'))
-    # model.add(LSTM(64, return_sequences=True))
-    model.add(LSTM(24, return_sequences=True))
+    if 'Specto' != featMode:  # do not convolve for spectogram
+        model.add(Conv1D(8, 48, strides=48, input_shape=trainShape[1:]))
+        model.add(Activation('relu'))
+        model.add(Conv1D(16, 24, strides=24))
+        model.add(Activation('sigmoid'))
+        model.add(LSTM(24, return_sequences=True))
+    else:
+        model.add(LSTM(24, return_sequences=True, input_shape=trainShape[1:]))
+
     model.add(LSTM(12, return_sequences=False))
     model.add(Dense(numCls, activation='softmax'))
     # model.add(Activation('softmax'))
@@ -342,6 +387,8 @@ def runConfig(parameters):
     folderInputs = parameters['inputFolder']
     trainingEpoch = parameters['trainingEpoch']
     featureMode = parameters['featureMode']
+    channelMode = parameters['channelMode']
+    classificationMode = parameters['classificationMode']
     stepSize = parameters['stepSize']
     batchSize = parameters['batchSize']
     learningRate = parameters['learningRate']
@@ -350,7 +397,7 @@ def runConfig(parameters):
     clsModel = parameters['clsModel']
 
     # use fileReader() for random shuffling every iteration. use some temp data for tests only. read explanations below
-    inputs, filenames, labelList = fileReader(folderInputs, stepSize, featureMode)
+    inputs, labels, labelDict = fileReader(folderInputs, stepSize, featureMode, channelMode, classificationMode)
 
     # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
     # Best found way for comparing performances of different network variations
@@ -358,15 +405,15 @@ def runConfig(parameters):
     # # save temp data (run fileReader() with uncommenting below, only once for saving random data)
     # saveData(inputsMags, 'C:/Users/atil/Desktop/tempDataStore/inputsMags.dat')
     # saveData(filenames, 'C:/Users/atil/Desktop/tempDataStore/filenames.dat')
-    # saveData(labelList, 'C:/Users/atil/Desktop/tempDataStore/labelList.dat')
+    # saveData(labelDict, 'C:/Users/atil/Desktop/tempDataStore/labelDict.dat')
 
     # # load from temp data (uncomment below for loading, comment out fileReader() function)
     # inputsMags = loadData('C:/Users/atil/Desktop/tempDataStore/inputsMags.dat')
     # filenames = loadData('C:/Users/atil/Desktop/tempDataStore/filenames.dat')
-    # labelList = loadData('C:/Users/atil/Desktop/tempDataStore/labelList.dat')
+    # labelDict = loadData('C:/Users/atil/Desktop/tempDataStore/labelDict.dat')
     # input('After. Press ENTER to continue:')
 
-    numClasses = len(labelList)  # total number of classification classes (ie. people)
+    numClasses = len(labelDict)  # total number of classification classes (ie. people)
 
     myPrint('')
     myPrint('Total of ' + str(len(inputs)) + ' inputs loaded @ ' + folderInputs)
@@ -375,16 +422,11 @@ def runConfig(parameters):
     # train with 80%(minus remainder of batchSize) of files, test with 20%
     totalOfInputs = len(inputs)
     trainingSteps = int(totalOfInputs * 0.8)
-    if 0 == batchSize:
+    if (0 == batchSize) or (batchSize > trainingSteps):
         batchSize = trainingSteps
     trainingSteps -= (trainingSteps % batchSize)  # for better fit of train size, not necessary.
     testSteps = totalOfInputs - trainingSteps
     myPrint(trainingSteps, 'steps for training,', testSteps, 'steps for test')
-
-    # create labels for inputs
-    labels = list()
-    for f in filenames:
-        labels.append(labelList[f[:2]])
 
     myPrint('Splitting Train and Test Data...')
     xTrain, xTest, yTrain, yTest = train_test_split(np.asarray(inputs), np.asarray(labels),
@@ -394,12 +436,12 @@ def runConfig(parameters):
     # todo - ai : Param 'Both' causes probable memory error: Process finished with exit code -1073741819 (0xC0000005)
     if clsModel in ['LSTM', 'Both']:
         # Classify with Keras LSTM Model
-        trainTestLSTM(xTrain, xTest, yTrain, yTest, numClasses, trainingEpoch, batchSize, list(labelList.keys()),
-                      lossFunction, optimizer, learningRate)
+        trainTestLSTM(xTrain, xTest, yTrain, yTest, numClasses, trainingEpoch, batchSize, list(labelDict.keys()),
+                      lossFunction, optimizer, learningRate, featureMode)
     gc.collect()
     if clsModel in ['SVM', 'Both']:
         # Classify with SkLearn SVM Model
-        trainTestSVM(xTrain, xTest, yTrain, yTest, list(labelList.keys()))
+        trainTestSVM(xTrain, xTest, yTrain, yTest, list(labelDict.keys()))
     gc.collect()
 
     # # todo - ai : try concatanating on Mags and Freqs on axis 2, may be this can give better accuracy. Try!
@@ -418,8 +460,7 @@ def runConfig(parameters):
     del xTest
     del yTest
     del inputs
-    del labelList
-    del filenames
+    del labelDict
     del labels
     gc.collect()
 
@@ -429,8 +470,13 @@ def runConfig(parameters):
 # enable for capturing console to file (does not print to console this way, but captures all stdout from other libs too)
 # myPrint() function on the other hand, writes to both console and file, but does not capture stdout
 # sys.stdout = open('out.txt', 'a')
-
-fConf = open('conf.txt', 'r')
+myPrint('======= Running File: %s =======' % sys.argv[0])
+if 2 == len(sys.argv):
+    fConf = open(sys.argv[1], 'r')
+    myPrint('Reading Configuration from command line argument: %s' % os.path.realpath(fConf.name))
+else:
+    fConf = open('conf.txt', 'r')
+    myPrint('Reading Default Configuration: %s' % os.path.realpath(fConf.name))
 configList = fConf.read().splitlines()
 fConf.close()
 totalConfigurationCount = len(configList)
