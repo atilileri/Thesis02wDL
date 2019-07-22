@@ -65,6 +65,8 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
     labelListLocal = list()
     inputFilesLocal = list()
     maxLen = 0
+    r = np.random.RandomState()
+    randState = r.get_state()
     myPrint('Initial Scan.')
     for rootPath, directories, files in os.walk(folder):
         if shuffle:
@@ -102,16 +104,16 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
 
                 # decimate by stepSize
                 if stepSz > 1 and 'Specto' != featureM:
-                    inputFile = inputFile[::stepSz]
-
+                    inputFile = np.array(inputFile[::stepSz])
+                    gc.collect()
                 # update max length
                 seqLen = len(inputFile)
                 maxLen = max(seqLen, maxLen)
 
                 # seperate out only wanted channel(s)
                 chnSlice = None
-                if channelM in ['0', '1', '2', '3']:
-                    chnSlice = int(channelM)  # index: [0-3] channel (without losing axis count)
+                if channelM in ['0', '1', '2', '3', '0Ov', '1Ov', '2Ov', '3Ov']:
+                    chnSlice = int(channelM[0])  # index: [0-3] channel
                 elif 'Front' == channelM:
                     if postureId in ['01', '02']:
                         chnSlice = 1
@@ -122,7 +124,7 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
                     else:
                         myPrint('ERROR: Invalid posture for front microphone setting:', postureId)
                         sys.exit()
-                elif channelM in ['All', 'Split']:
+                elif channelM in ['All', 'Split', 'AllShfUni', 'AllShfRnd']:
                     pass
                 else:
                     myPrint('ERROR: Invalid channel mode for file read:', channelM)
@@ -183,8 +185,27 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
                         del inpFl
                         gc.collect()
                 else:
+                    if channelM in ['AllShfUni', 'AllShfRnd']:
+                        # make channels first dimension
+                        inputFile = np.swapaxes(inputFile, 0, 1)
+                        if 'AllShfUni' == channelM:  # randomize each config's channel order, not each file
+                            np.random.set_state(randState)  # randomize channels in unison way for each config
+                        elif 'AllShfRnd' == channelM:
+                            pass  # randomize channel order of each and every file differently
+                        else:
+                            myPrint('ERROR: Invalid channel mode for randomization:', channelM)
+                            sys.exit()
+                        # shuffle channels
+                        np.random.shuffle(inputFile)
+                        # set dimension order to default
+                        inputFile = np.swapaxes(inputFile, 0, 1)
+
                     # flatten
-                    inputFile = np.reshape(inputFile, (seqLen, -1))
+                    inputFile = np.reshape(inputFile, (seqLen, -1)).copy()
+                    gc.collect()
+                    if channelM in ['0Ov', '1Ov', '2Ov', '3Ov']:
+                        inputFile = np.lib.stride_tricks.as_strided(inputFile, (seqLen-3, inputFile.shape[-1]*4),
+                                                                    inputFile.strides, writeable=False)
                     # append each item to their lists
                     inputFilesLocal.append(inputFile.copy())
                     labelListLocal.append(label)
@@ -192,6 +213,8 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
                 del inputFile
                 gc.collect()
 
+    if channelM in ['0Ov', '1Ov', '2Ov', '3Ov']:  # beacuse of overlapping windows, all input lengths are reduced by 3.
+        maxLen -= 3
     myPrint('')  # for new line
     myPrint('Generating Labels...')
     # regenerate label list from final label dict as one-hot vector form
