@@ -72,7 +72,8 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
             np.random.shuffle(files)
         myPrint('Reading:', end='')
         for flname in files:
-            if ('.imfFeat' in flname and featureM in ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh']) or \
+            if ('.imfFeat' in flname and featureM in ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh',
+                                                      'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh']) or \
                     ('.wav' in flname and featureM in ['Wav']) or \
                     ('.specto' in flname and featureM in ['Specto']):
                 # read file
@@ -82,14 +83,15 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
                     inputFile = loadData(rootPath + flname)
 
                 # read labels
+                speakerId = flname[0:2]
+                postureId = flname[2:4]
                 if 'Speaker' == classificationM:
-                    label = flname[0:2]
+                    label = speakerId
                 elif 'Posture' == classificationM:
-                    label = flname[2:4]
+                    label = postureId
                 else:
                     myPrint('ERROR: Invalid classification mode:', classificationM)
-                    return
-                labelListLocal.append(label)
+                    sys.exit()
                 if label not in labelDictLocal:
                     labelCount = len(labelDictLocal)
                     for l in labelDictLocal:
@@ -108,33 +110,55 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
 
                 # seperate out only wanted channel(s)
                 chnSlice = None
-                if 0 <= channelM <= 3:
-                    chnSlice = channelM  # index: [0-3] channel (without losing axis count)
-                elif 4 == channelM:
+                if channelM in ['0', '1', '2', '3']:
+                    chnSlice = int(channelM)  # index: [0-3] channel (without losing axis count)
+                elif 'Front' == channelM:
+                    if postureId in ['01', '02']:
+                        chnSlice = 1
+                    elif postureId in ['03', '04']:
+                        chnSlice = 2
+                    elif postureId in ['05']:
+                        chnSlice = 3
+                    else:
+                        myPrint('ERROR: Invalid posture for front microphone setting:', postureId)
+                        sys.exit()
+                elif channelM in ['All', 'Split']:
                     pass
                 else:
                     myPrint('ERROR: Invalid channel mode for file read:', channelM)
-                    return
+                    sys.exit()
 
                 # seperate out only wanted feature(s)
                 featSlice = None
                 if 'Freqs' == featureM:
-                    featSlice = 0  # index: 0 (without losing axis count)
+                    featSlice = 0  # index: 0
                 elif 'Mags' == featureM:
-                    featSlice = 1  # index: 1 (without losing axis count)
+                    featSlice = 1  # index: 1
                 elif 'Phases' == featureM:
-                    featSlice = 2  # index: 2 (without losing axis count)
+                    featSlice = 2  # index: 2
+                elif 'nFreqs' == featureM:
+                    featSlice = 3  # index: 3
+                elif 'nMags' == featureM:
+                    featSlice = 4  # index: 4
+                elif 'nPhases' == featureM:
+                    featSlice = 5  # index: 5
                 elif 'FrMg' == featureM:
                     featSlice = slice(0, 2)  # indexes: 0,1
                 elif 'MgPh' == featureM:
                     featSlice = slice(1, 3)  # indexes: 1,2
                 elif 'FrPh' == featureM:
                     featSlice = slice(0, 3, 2)  # indexes: 0,2
+                elif 'FrnFr' == featureM:
+                    featSlice = slice(0, 4, 3)  # indexes: 0,3
+                elif 'MgnMg' == featureM:
+                    featSlice = slice(1, 5, 3)  # indexes: 1,4
+                elif 'PhnPh' == featureM:
+                    featSlice = slice(2, 6, 3)  # indexes: 2,5
                 elif featureM in ['Wav', 'Specto', 'FrMgPh']:
                     pass
                 else:
                     myPrint('ERROR: Invalid feature mode for file read:', featureM)
-                    return
+                    sys.exit()
 
                 # apply seperation
                 if (chnSlice is not None) and (featSlice is not None):
@@ -146,11 +170,24 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
                 else:
                     pass  # No slicing needed
 
-                # flatten
-                inputFile = np.reshape(inputFile, (seqLen, -1))
+                if 'Split' == channelM:
+                    # make channels first dimension
+                    inputFile = np.swapaxes(inputFile, 0, 1)
 
-                # append each item to their lists
-                inputFilesLocal.append(inputFile.copy())
+                    for inpFl in inputFile:
+                        # flatten each channel
+                        inpFl = np.reshape(inpFl, (seqLen, -1))
+                        # append each channel as seperate items
+                        inputFilesLocal.append(inpFl.copy())
+                        labelListLocal.append(label)
+                        del inpFl
+                        gc.collect()
+                else:
+                    # flatten
+                    inputFile = np.reshape(inputFile, (seqLen, -1))
+                    # append each item to their lists
+                    inputFilesLocal.append(inputFile.copy())
+                    labelListLocal.append(label)
 
                 del inputFile
                 gc.collect()
@@ -169,6 +206,7 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
             diff = maxLen - seqLen
             inputFilesLocal[i] = np.pad(inputFilesLocal[i], ((0, diff), (0, 0)), mode='constant', constant_values=0)
             myPrint('.', end='', flush=True)
+            gc.collect()
         myPrint('')
 
     gc.collect()
@@ -189,7 +227,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
 
     # create the model
     model = Sequential()
-    if 'Specto' != featMode:  # do not convolve for spectogram
+    if 'Specto' != featMode:  # do not convolve for spectogram, since it is not as long as other modes.
         model.add(Conv1D(8, 48, strides=48, input_shape=trainShape[1:]))
         model.add(Activation('relu'))
         model.add(Conv1D(16, 24, strides=24))
@@ -220,7 +258,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
         opt = optimizers.rmsprop(lr=learnRate)
     else:
         myPrint('ERROR: Invalid Optimizer Parameter Value:', optim)
-        return
+        sys.exit()
 
     ##
     # Loss function selection (Paper Refs: https://keras.io/losses/ and
@@ -237,7 +275,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
         los = losses.kullback_leibler_divergence
     else:
         myPrint('ERROR: Invalid Loss Function Parameter Value:', losFnc)
-        return
+        sys.exit()
 
     model.compile(loss=los, optimizer=opt, metrics=['accuracy'])
     myPrint('Optimizer:', opt)
@@ -424,11 +462,11 @@ def runConfig(parameters):
     trainingSteps = int(totalOfInputs * 0.8)
     if (0 == batchSize) or (batchSize > trainingSteps):
         batchSize = trainingSteps
-    trainingSteps -= (trainingSteps % batchSize)  # for better fit of train size, not necessary.
+    # trainingSteps -= (trainingSteps % batchSize)  # for better fit of train size, not necessary.
     testSteps = totalOfInputs - trainingSteps
     myPrint(trainingSteps, 'steps for training,', testSteps, 'steps for test')
 
-    myPrint('Splitting Train and Test Data...')
+    myPrint('Splitting Train and Test Data...', flush=True)
     xTrain, xTest, yTrain, yTest = train_test_split(np.asarray(inputs), np.asarray(labels),
                                                     stratify=labels, train_size=trainingSteps, test_size=testSteps)
 
@@ -443,17 +481,6 @@ def runConfig(parameters):
         # Classify with SkLearn SVM Model
         trainTestSVM(xTrain, xTest, yTrain, yTest, list(labelDict.keys()))
     gc.collect()
-
-    # # todo - ai : try concatanating on Mags and Freqs on axis 2, may be this can give better accuracy. Try!
-    # # todo cont.: remove duplicating y labels. My GPU is not enough :)
-    # xTrainAll = np.concatenate((xTrainMag, xTrainFreq), axis=0)
-    # xTestAll = np.concatenate((xTestMag, xTestFreq), axis=0)
-    #
-    # yTraining = np.concatenate((yTraining, yTraining), axis=0)
-    # yTesting = np.concatenate((yTesting, yTesting), axis=0)
-    #
-    # myPrint('------Model for All------')
-    # trainTestLSTM(xTrainAll, xTestAll, yTraining, yTesting, numClasses)
 
     del xTrain
     del yTrain

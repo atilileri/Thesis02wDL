@@ -6,13 +6,17 @@ import random
 # inputFolders = ['E:/atili/Datasets/BreathDataset/Processed_Small/inputsFrom_20190608_143805/']
 
 inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/']
-featureModes = ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh', 'Wav', 'Specto']
-# channelModes = [0, 1, 2, 3, 4]
-channelModes = [0, 4]
-# classificationModes = ['Speaker', 'Posture']
-classificationModes = ['Posture']
+# featureModes = ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh', 'Wav', 'Specto',
+#                 'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh']
+featureModes = ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh',
+                'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh']
+# channelModes = ['0', '1', '2', '3', 'All', 'Front', 'Split']
+channelModes = ['All']
+# channelModes = [0, 'All']
+classificationModes = ['Speaker', 'Posture']
+# classificationModes = ['Posture']
 trainingEpochs = [300]
-stepSizes = [4]
+stepSizes = [6]
 batchSizes = [512]
 learningRates = [0.001]
 # lossFunctions = ['CatCrosEnt', 'KLDiv']
@@ -23,7 +27,7 @@ optimizers = ['Adam']
 models = ['LSTM']
 
 # fileCreationMode = 'One'  # appends all to 'conf0.txt'
-fileCreationMode = 'Each'  # creates N different 'confN.txt' files
+fileCreationMode = 'Each'  # creates N different 'conf[1-N].txt' files
 fRunner = open('configurationRunner.bat', 'w+')
 
 countLimit = 0
