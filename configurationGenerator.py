@@ -61,13 +61,13 @@ if 0 < countLimit:
     for i in range(countLimit):
         if 'One' == fileCreationMode and 0 == i:
             fConf = open('./confFiles/conf' + str(fileCounter) + '.txt', 'w+')
-            print('python lstmKeras.py ./confFiles/conf' + str(fileCounter) + '.txt', file=fRunner)
+            print('python classifierLSTMnSVM.py ./confFiles/conf' + str(fileCounter) + '.txt', file=fRunner)
         elif 'Each' == fileCreationMode:
             fileCounter += 1
             if fConf is not None:
                 fConf.close()
             fConf = open('./confFiles/conf' + str(fileCounter) + '.txt', 'w+')
-            print('python lstmKeras.py ./confFiles/conf' + str(fileCounter) + '.txt', file=fRunner)
+            print('python classifierLSTMnSVM.py ./confFiles/conf' + str(fileCounter) + '.txt', file=fRunner)
         print(random.choice(listOfParams), file=fConf)
     if fConf is not None:
         fConf.close()
@@ -77,13 +77,13 @@ else:
     for i in range(len(listOfParams)):
         if 'One' == fileCreationMode and 0 == i:
             fConf = open('./confFiles/conf' + str(fileCounter) + '.txt', 'w+')
-            print('python lstmKeras.py ./confFiles/conf' + str(fileCounter) + '.txt', file=fRunner)
+            print('python classifierLSTMnSVM.py ./confFiles/conf' + str(fileCounter) + '.txt', file=fRunner)
         elif 'Each' == fileCreationMode:
             fileCounter += 1
             if fConf is not None:
                 fConf.close()
             fConf = open('./confFiles/conf' + str(fileCounter) + '.txt', 'w')
-            print('python lstmKeras.py ./confFiles/conf' + str(fileCounter) + '.txt', file=fRunner)
+            print('python classifierLSTMnSVM.py ./confFiles/conf' + str(fileCounter) + '.txt', file=fRunner)
         print(listOfParams[i], file=fConf)
     if fConf is not None:
         fConf.close()
