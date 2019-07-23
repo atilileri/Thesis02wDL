@@ -17,22 +17,31 @@ from sklearn.svm import LinearSVC
 from math import sqrt
 import gc
 import scipy.io.wavfile
+import nbformat as nbf
 
-fOut = None
+fOutTxt = None
+scriptStartDateTime = datetime.now().strftime('%Y%m%d_%H%M%S')
+results = None
 
 
 # Prints to both a file and console
 def myPrint(*args, mode='both', **kwargs):
-    global fOut
-    if (fOut is None) and (mode in ['both', 'file']):
-        outFileName = './outputs/out_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.txt'
+    global fOutTxt
+    global scriptStartDateTime
+    global results
+
+    if (fOutTxt is None) and (mode in ['both', 'file']):
+        outFileName = './outputs/out_' + scriptStartDateTime + '.txt'
         if not os.path.exists(os.path.dirname(outFileName)):
             os.makedirs(os.path.dirname(outFileName))
-        fOut = open(outFileName, 'w')
+        fOutTxt = open(outFileName, 'w+')
+
     if mode in ['both', 'file']:
-        print(*args, file=fOut, **kwargs)
+        print(*args, file=fOutTxt, **kwargs)
     if mode in ['both', 'console']:
         print(*args, **kwargs)
+    if 'code' == mode:
+        results = args[0]
 
 
 def durToStr(dur):
@@ -315,9 +324,11 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     # model.fit() function prints to console but we can not grab it as it is.
     # So myPrint it only to file with given info.
     for i in range(len(trainingResults.history['loss'])):
-        myPrint('Epoch #%d: Loss:%.4f, Accuracy:%.4f Validation Loss:%.4f, Validation Accuracy:%.4f'
+        myPrint('Epoch #%d: Loss:%.4f, Accuracy:%.4f, Validation Loss:%.4f, Validation Accuracy:%.4f'
                 % (i+1, trainingResults.history['loss'][i], trainingResults.history['acc'][i],
                    trainingResults.history['val_loss'][i], trainingResults.history['val_acc'][i]), mode='file')
+
+    myPrint(trainingResults.history, mode='code')
 
     # Final evaluation of the model
     myPrint('')
@@ -534,20 +545,60 @@ myPrint('Total of %d configuration(s) will be run' % totalConfigurationCount)
 for cIdx in range(totalConfigurationCount):
     gc.collect()
     parameterList = eval(configList[cIdx])
-    startTime = datetime.now()
+    confStartTime = datetime.now()
     myPrint('============ Config: %d/%d === Start Time: %s =======================================' %
-            (cIdx+1, totalConfigurationCount, startTime.strftime('%Y.%m.%d %H:%M:%S')))
+            (cIdx + 1, totalConfigurationCount, confStartTime.strftime('%Y.%m.%d %H:%M:%S')))
     myPrint('Parameters:', parameterList)
 
     runConfig(parameterList)
 
-    endTime = datetime.now()
+    confEndTime = datetime.now()
     myPrint('============ Config: %d/%d === End Time: %s =========================================' %
-            (cIdx+1, totalConfigurationCount, endTime.strftime('%Y.%m.%d %H:%M:%S')))
+            (cIdx + 1, totalConfigurationCount, confEndTime.strftime('%Y.%m.%d %H:%M:%S')))
     myPrint('============ Config: %d/%d === Duration: %s =====================' %
-            (cIdx + 1, totalConfigurationCount, durToStr(endTime - startTime)))
+            (cIdx + 1, totalConfigurationCount, durToStr(confEndTime - confStartTime)))
     myPrint('', flush=True)
+    myPrint('Ending script after plotting results...')
     gc.collect()
 
-if fOut is not None:
-    fOut.close()
+# save results in notebook and and the script
+if fOutTxt is not None:
+    fOutTxt.flush()
+    fOutTxt.seek(0)
+    txt = fOutTxt.readlines()
+    fOutTxt.close()
+
+    outFileName = './outputs/notebooks/out_' + scriptStartDateTime + '.ipynb'
+    if not os.path.exists(os.path.dirname(outFileName)):
+        os.makedirs(os.path.dirname(outFileName))
+    fOutNtb = open(outFileName, 'w')
+
+    nb = nbf.v4.new_notebook()
+    nb['cells'] = [nbf.v4.new_raw_cell(txt),
+                   nbf.v4.new_code_cell('a = ' + str(results) + '''\n%matplotlib inline
+from matplotlib import pyplot as plt
+# ACCURACIES
+plt.figure(figsize=(10, 10))
+plt.title('Accuracies')
+plt.xlabel('Epoch(s)')
+plt.ylabel('Accuracy')
+plt.plot(a['acc'], label='Train Acc')
+plt.plot(a['val_acc'], label='Test Acc')
+plt.grid(linestyle='dashed', linewidth=0.5)
+plt.legend()
+plt.tight_layout()
+plt.show()
+# LOSSES
+plt.figure(figsize=(10, 10))
+plt.title('Losses')
+plt.xlabel('Epoch(s)')
+plt.ylabel('Loss')
+plt.plot(a['loss'], label='Train Loss')
+plt.plot(a['val_loss'], label='Test Loss')
+plt.grid(linestyle='dashed', linewidth=0.5)
+plt.legend()
+plt.tight_layout()
+plt.show()''')]
+
+    nbf.write(nb, fOutNtb)
+    fOutNtb.close()
