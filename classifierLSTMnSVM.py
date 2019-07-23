@@ -574,7 +574,7 @@ if fOutTxt is not None:
     fOutNtb = open(outFileName, 'w')
 
     nb = nbf.v4.new_notebook()
-    nb['cells'] = [  # nbf.v4.new_raw_cell(txt),
+    nb['cells'] = [nbf.v4.new_raw_cell(txt),
                    nbf.v4.new_code_cell('r = ' + str(results) + '''\n%matplotlib inline
 from matplotlib import pyplot as plt
 # ACCURACIES
