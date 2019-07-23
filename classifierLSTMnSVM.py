@@ -599,6 +599,5 @@ plt.grid(linestyle='dashed', linewidth=0.5)
 plt.legend()
 plt.tight_layout()
 plt.show()''')]
-
     nbf.write(nb, fOutNtb)
     fOutNtb.close()
