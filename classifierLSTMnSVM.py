@@ -574,16 +574,16 @@ if fOutTxt is not None:
     fOutNtb = open(outFileName, 'w')
 
     nb = nbf.v4.new_notebook()
-    nb['cells'] = [nbf.v4.new_raw_cell(txt),
-                   nbf.v4.new_code_cell('a = ' + str(results) + '''\n%matplotlib inline
+    nb['cells'] = [  # nbf.v4.new_raw_cell(txt),
+                   nbf.v4.new_code_cell('r = ' + str(results) + '''\n%matplotlib inline
 from matplotlib import pyplot as plt
 # ACCURACIES
 plt.figure(figsize=(10, 10))
 plt.title('Accuracies')
 plt.xlabel('Epoch(s)')
 plt.ylabel('Accuracy')
-plt.plot(a['acc'], label='Train Acc')
-plt.plot(a['val_acc'], label='Test Acc')
+plt.plot(r['acc'], label='Train Acc')
+plt.plot(r['val_acc'], label='Test Acc')
 plt.grid(linestyle='dashed', linewidth=0.5)
 plt.legend()
 plt.tight_layout()
@@ -593,8 +593,8 @@ plt.figure(figsize=(10, 10))
 plt.title('Losses')
 plt.xlabel('Epoch(s)')
 plt.ylabel('Loss')
-plt.plot(a['loss'], label='Train Loss')
-plt.plot(a['val_loss'], label='Test Loss')
+plt.plot(r['loss'], label='Train Loss')
+plt.plot(r['val_loss'], label='Test Loss')
 plt.grid(linestyle='dashed', linewidth=0.5)
 plt.legend()
 plt.tight_layout()
