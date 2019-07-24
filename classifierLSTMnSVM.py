@@ -565,7 +565,11 @@ for cIdx in range(totalConfigurationCount):
 if fOutTxt is not None:
     fOutTxt.flush()
     fOutTxt.seek(0)
-    txt = fOutTxt.readlines()
+    txt = list()
+    txt.append('"""\n')
+    txt.extend(fOutTxt.readlines())
+    txt.append('"""\n')
+    txt.append('print("")\n')
     fOutTxt.close()
 
     outFileName = './outputs/notebooks/out_' + scriptStartDateTime + '.ipynb'
@@ -574,7 +578,8 @@ if fOutTxt is not None:
     fOutNtb = open(outFileName, 'w')
 
     nb = nbf.v4.new_notebook()
-    nb['cells'] = [nbf.v4.new_raw_cell(txt),
+    txt = ''.join(txt)
+    nb['cells'] = [nbf.v4.new_code_cell(str(txt)),
                    nbf.v4.new_code_cell('r = ' + str(results) + '''\n%matplotlib inline
 from matplotlib import pyplot as plt
 # ACCURACIES
