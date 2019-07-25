@@ -9,13 +9,15 @@ inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max
 # featureModes = ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh', 'Wav', 'Specto',
 #                 'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh']
 featureModes = ['Mags']
-# channelModes = ['0', '1', '2', '3', 'All', 'Front', 'Split', 'AllShfUni', 'AllShfRnd', '0Ov', '1Ov', '2Ov', '3Ov']
-channelModes = ['0']
-# channelModes = [0, 'All']
-# classificationModes = ['Speaker', 'Posture']
-classificationModes = ['Speaker']
+# channelModes = ['0', '1', '2', '3', 'All', 'Front', 'Split', 'AllShfUni', 'AllShfRnd', '0Ov', '1Ov', '2Ov', '3Ov',
+#                 'SplitOv']
+channelModes = ['SplitOv']
+classificationModes = ['Speaker', 'Posture5', 'Posture3']
+# classificationModes = ['Speaker']
 trainingEpochs = [300]
-stepSizes = [4]
+stepSizes = [16]
+# sampRates = [8, 48]
+sampRates = [48]
 batchSizes = [512]
 learningRates = [0.001]
 # lossFunctions = ['CatCrosEnt', 'KLDiv']
@@ -38,24 +40,26 @@ for inp in inputFolders:
             for clm in classificationModes:
                 for te in trainingEpochs:
                     for ss in stepSizes:
-                        for bs in batchSizes:
-                            for lr in learningRates:
-                                for lf in lossFunctions:
-                                    for o in optimizers:
-                                        for m in models:
-                                            parameters = dict()
-                                            parameters['inputFolder'] = inp
-                                            parameters['featureMode'] = fm
-                                            parameters['channelMode'] = cm
-                                            parameters['classificationMode'] = clm
-                                            parameters['trainingEpoch'] = te
-                                            parameters['stepSize'] = ss
-                                            parameters['batchSize'] = bs
-                                            parameters['learningRate'] = lr
-                                            parameters['lossFunction'] = lf
-                                            parameters['optimizer'] = o
-                                            parameters['clsModel'] = m
-                                            listOfParams.append(parameters.copy())
+                        for sr in sampRates:
+                            for bs in batchSizes:
+                                for lr in learningRates:
+                                    for lf in lossFunctions:
+                                        for o in optimizers:
+                                            for m in models:
+                                                parameters = dict()
+                                                parameters['inputFolder'] = inp
+                                                parameters['featureMode'] = fm
+                                                parameters['channelMode'] = cm
+                                                parameters['classificationMode'] = clm
+                                                parameters['trainingEpoch'] = te
+                                                parameters['stepSize'] = ss
+                                                parameters['sampRate'] = sr
+                                                parameters['batchSize'] = bs
+                                                parameters['learningRate'] = lr
+                                                parameters['lossFunction'] = lf
+                                                parameters['optimizer'] = o
+                                                parameters['clsModel'] = m
+                                                listOfParams.append(parameters.copy())
 if 0 < countLimit:
     fConf = None
     for i in range(countLimit):

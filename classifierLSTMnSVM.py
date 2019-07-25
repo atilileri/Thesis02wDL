@@ -18,7 +18,16 @@ from math import sqrt
 import gc
 import scipy.io.wavfile
 import nbformat as nbf
+import pandas as pd
+import kNNDTW
 
+# print options
+np.set_printoptions(edgeitems=np.inf)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.width', 400)
+
+# global init
 fOutTxt = None
 scriptStartDateTime = datetime.now().strftime('%Y%m%d_%H%M%S')
 results = None
@@ -68,7 +77,7 @@ def clearGPU():
 
 
 # prepare input for given params
-def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True, pad=True):
+def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuffle=True, pad=True):
     gc.collect()
     labelDictLocal = dict()
     labelListLocal = list()
@@ -76,6 +85,15 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
     maxLen = 0
     r = np.random.RandomState()
     randState = r.get_state()
+    imfFeatExt = '.imfFeat'
+    if 8 == sampRt:
+        imfFeatExt = imfFeatExt + '8khz'
+    elif 48 == sampRt:
+        pass
+    else:
+        myPrint('ERROR: Invalid sampling rate parameter:', sampRt)
+        sys.exit()
+
     myPrint('Initial Scan.')
     for rootPath, directories, files in os.walk(folder):
         if shuffle:
@@ -83,13 +101,22 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
             np.random.shuffle(files)
         myPrint('Reading:', end='')
         for flname in files:
-            if ('.imfFeat' in flname and featureM in ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh',
-                                                      'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh']) or \
-                    ('.wav' in flname and featureM in ['Wav']) or \
+            if (imfFeatExt in flname and featureM in ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh',
+                                                      'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh',
+                                                      ]) or \
+                    ('.wav' in flname and featureM in ['Wav', 'Dur']) or \
                     ('.specto' in flname and featureM in ['Specto']):
                 # read file
                 if 'Wav' == featureM:
                     _, inputFile = scipy.io.wavfile.read(rootPath + flname)
+                elif 'Dur' == featureM:
+                    # read duration features
+                    parts = '.'.join(flname.split('.')[:-1])  # only name, without extension
+                    parts = str(parts.split('_')[-1])  # 'startMs-lenMs'
+                    parts = parts.split('-')
+                    startMs = float(parts[0]) * 1000
+                    durationMs = float(parts[1]) * 1000
+                    inputFile = [startMs, durationMs]
                 else:
                     inputFile = loadData(rootPath + flname)
 
@@ -98,8 +125,18 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
                 postureId = flname[2:4]
                 if 'Speaker' == classificationM:
                     label = speakerId
-                elif 'Posture' == classificationM:
+                elif 'Posture5' == classificationM:
                     label = postureId
+                elif 'Posture3' == classificationM:
+                    if postureId in ['01', '02']:
+                        label = '01'
+                    elif postureId in ['03', '04']:
+                        label = '02'
+                    elif '05' == postureId:
+                        label = '03'
+                    else:
+                        myPrint('ERROR: Invalid posture id:', postureId)
+                        sys.exit()
                 else:
                     myPrint('ERROR: Invalid classification mode:', classificationM)
                     sys.exit()
@@ -112,117 +149,126 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
                 myPrint('.', end='', flush=True)
 
                 # decimate by stepSize
-                if stepSz > 1 and 'Specto' != featureM:
+                if stepSz > 1 and featureM not in ['Specto', 'Dur']:
                     inputFile = np.array(inputFile[::stepSz])
                     gc.collect()
                 # update max length
                 seqLen = len(inputFile)
                 maxLen = max(seqLen, maxLen)
 
-                # seperate out only wanted channel(s)
-                chnSlice = None
-                if channelM in ['0', '1', '2', '3', '0Ov', '1Ov', '2Ov', '3Ov']:
-                    chnSlice = int(channelM[0])  # index: [0-3] channel
-                elif 'Front' == channelM:
-                    if postureId in ['01', '02']:
-                        chnSlice = 1
-                    elif postureId in ['03', '04']:
-                        chnSlice = 2
-                    elif postureId in ['05']:
-                        chnSlice = 3
+                if 'Dur' != featureM:
+                    # seperate out only wanted channel(s)
+                    chnSlice = None
+                    if channelM in ['0', '1', '2', '3', '0Ov', '1Ov', '2Ov', '3Ov']:
+                        chnSlice = int(channelM[0])  # index: [0-3] channel
+                    elif 'Front' == channelM:
+                        if postureId in ['01', '02']:
+                            chnSlice = 1
+                        elif postureId in ['03', '04']:
+                            chnSlice = 2
+                        elif postureId in ['05']:
+                            chnSlice = 3
+                        else:
+                            myPrint('ERROR: Invalid posture for front microphone setting:', postureId)
+                            sys.exit()
+                    elif channelM in ['All', 'Split', 'SplitOv', 'AllShfUni', 'AllShfRnd']:
+                        pass
                     else:
-                        myPrint('ERROR: Invalid posture for front microphone setting:', postureId)
+                        myPrint('ERROR: Invalid channel mode for file read:', channelM)
                         sys.exit()
-                elif channelM in ['All', 'Split', 'AllShfUni', 'AllShfRnd']:
-                    pass
-                else:
-                    myPrint('ERROR: Invalid channel mode for file read:', channelM)
-                    sys.exit()
 
-                # seperate out only wanted feature(s)
-                featSlice = None
-                if 'Freqs' == featureM:
-                    featSlice = 0  # index: 0
-                elif 'Mags' == featureM:
-                    featSlice = 1  # index: 1
-                elif 'Phases' == featureM:
-                    featSlice = 2  # index: 2
-                elif 'nFreqs' == featureM:
-                    featSlice = 3  # index: 3
-                elif 'nMags' == featureM:
-                    featSlice = 4  # index: 4
-                elif 'nPhases' == featureM:
-                    featSlice = 5  # index: 5
-                elif 'FrMg' == featureM:
-                    featSlice = slice(0, 2)  # indexes: 0,1
-                elif 'MgPh' == featureM:
-                    featSlice = slice(1, 3)  # indexes: 1,2
-                elif 'FrPh' == featureM:
-                    featSlice = slice(0, 3, 2)  # indexes: 0,2
-                elif 'FrnFr' == featureM:
-                    featSlice = slice(0, 4, 3)  # indexes: 0,3
-                elif 'MgnMg' == featureM:
-                    featSlice = slice(1, 5, 3)  # indexes: 1,4
-                elif 'PhnPh' == featureM:
-                    featSlice = slice(2, 6, 3)  # indexes: 2,5
-                elif featureM in ['Wav', 'Specto', 'FrMgPh']:
-                    pass
-                else:
-                    myPrint('ERROR: Invalid feature mode for file read:', featureM)
-                    sys.exit()
+                    # seperate out only wanted feature(s)
+                    featSlice = None
+                    if 'Freqs' == featureM:
+                        featSlice = 0  # index: 0
+                    elif 'Mags' == featureM:
+                        featSlice = 1  # index: 1
+                    elif 'Phases' == featureM:
+                        featSlice = 2  # index: 2
+                    elif 'nFreqs' == featureM:
+                        featSlice = 3  # index: 3
+                    elif 'nMags' == featureM:
+                        featSlice = 4  # index: 4
+                    elif 'nPhases' == featureM:
+                        featSlice = 5  # index: 5
+                    elif 'FrMg' == featureM:
+                        featSlice = slice(0, 2)  # indexes: 0,1
+                    elif 'MgPh' == featureM:
+                        featSlice = slice(1, 3)  # indexes: 1,2
+                    elif 'FrPh' == featureM:
+                        featSlice = slice(0, 3, 2)  # indexes: 0,2
+                    elif 'FrnFr' == featureM:
+                        featSlice = slice(0, 4, 3)  # indexes: 0,3
+                    elif 'MgnMg' == featureM:
+                        featSlice = slice(1, 5, 3)  # indexes: 1,4
+                    elif 'PhnPh' == featureM:
+                        featSlice = slice(2, 6, 3)  # indexes: 2,5
+                    elif featureM in ['Wav', 'Specto', 'FrMgPh', 'Dur']:
+                        pass
+                    else:
+                        myPrint('ERROR: Invalid feature mode for file read:', featureM)
+                        sys.exit()
 
-                # apply seperation
-                if (chnSlice is not None) and (featSlice is not None):
-                    inputFile = inputFile[:, chnSlice, featSlice, :]
-                elif (chnSlice is not None) and (featSlice is None):
-                    inputFile = inputFile[:, chnSlice, ...]
-                elif (chnSlice is None) and (featSlice is not None):
-                    inputFile = inputFile[:, :, featSlice, :]
-                else:
-                    pass  # No slicing needed
+                    # apply seperation
+                    if (chnSlice is not None) and (featSlice is not None):
+                        inputFile = inputFile[:, chnSlice, featSlice, :]
+                    elif (chnSlice is not None) and (featSlice is None):
+                        inputFile = inputFile[:, chnSlice, ...]
+                    elif (chnSlice is None) and (featSlice is not None):
+                        inputFile = inputFile[:, :, featSlice, :]
+                    else:
+                        pass  # No slicing needed
 
-                if 'Split' == channelM:
-                    # make channels first dimension
-                    inputFile = np.swapaxes(inputFile, 0, 1)
-
-                    for inpFl in inputFile:
-                        # flatten each channel
-                        inpFl = np.reshape(inpFl, (seqLen, -1))
-                        # append each channel as seperate items
-                        inputFilesLocal.append(inpFl.copy())
-                        labelListLocal.append(label)
-                        del inpFl
-                        gc.collect()
-                else:
-                    if channelM in ['AllShfUni', 'AllShfRnd']:
+                    if channelM in ['Split', 'SplitOv']:
                         # make channels first dimension
                         inputFile = np.swapaxes(inputFile, 0, 1)
-                        if 'AllShfUni' == channelM:  # randomize each config's channel order, not each file
-                            np.random.set_state(randState)  # randomize channels in unison way for each config
-                        elif 'AllShfRnd' == channelM:
-                            pass  # randomize channel order of each and every file differently
-                        else:
-                            myPrint('ERROR: Invalid channel mode for randomization:', channelM)
-                            sys.exit()
-                        # shuffle channels
-                        np.random.shuffle(inputFile)
-                        # set dimension order to default
-                        inputFile = np.swapaxes(inputFile, 0, 1)
 
-                    # flatten
-                    inputFile = np.reshape(inputFile, (seqLen, -1)).copy()
-                    gc.collect()
-                    if channelM in ['0Ov', '1Ov', '2Ov', '3Ov']:
-                        inputFile = np.lib.stride_tricks.as_strided(inputFile, (seqLen-3, inputFile.shape[-1]*4),
-                                                                    inputFile.strides, writeable=False)
-                    # append each item to their lists
+                        for inpFl in inputFile:
+                            # flatten each channel
+                            inpFl = np.reshape(inpFl, (seqLen, -1)).copy()
+                            gc.collect()
+                            if 'SplitOv' == channelM:
+                                inpFl = np.lib.stride_tricks.as_strided(inpFl,
+                                                                        (seqLen - 3, inpFl.shape[-1] * 4),
+                                                                        inpFl.strides, writeable=False)
+                            # append each channel as seperate items
+                            inputFilesLocal.append(inpFl.copy())
+                            labelListLocal.append(label)
+                            del inpFl
+                            gc.collect()
+                    else:
+                        if channelM in ['AllShfUni', 'AllShfRnd']:
+                            # make channels first dimension
+                            inputFile = np.swapaxes(inputFile, 0, 1)
+                            if 'AllShfUni' == channelM:  # randomize each config's channel order, not each file
+                                np.random.set_state(randState)  # randomize channels in unison way for each config
+                            elif 'AllShfRnd' == channelM:
+                                pass  # randomize channel order of each and every file differently
+                            else:
+                                myPrint('ERROR: Invalid channel mode for randomization:', channelM)
+                                sys.exit()
+                            # shuffle channels
+                            np.random.shuffle(inputFile)
+                            # set dimension order to default
+                            inputFile = np.swapaxes(inputFile, 0, 1)
+
+                        # flatten
+                        inputFile = np.reshape(inputFile, (seqLen, -1)).copy()
+                        gc.collect()
+                        if channelM in ['0Ov', '1Ov', '2Ov', '3Ov']:
+                            inputFile = np.lib.stride_tricks.as_strided(inputFile, (seqLen-3, inputFile.shape[-1]*4),
+                                                                        inputFile.strides, writeable=False)
+                        # append each item to their lists
+                        inputFilesLocal.append(inputFile.copy())
+                        labelListLocal.append(label)
+                else:  # featureM == 'Dur'
                     inputFilesLocal.append(inputFile.copy())
                     labelListLocal.append(label)
-
                 del inputFile
                 gc.collect()
 
-    if channelM in ['0Ov', '1Ov', '2Ov', '3Ov']:  # beacuse of overlapping windows, all input lengths are reduced by 3.
+    # beacuse of overlapping, input lengths are reduced by 3.
+    if channelM in ['0Ov', '1Ov', '2Ov', '3Ov', 'SplitOv'] and 'Dur' != featureM:
         maxLen -= 3
     myPrint('')  # for new line
     myPrint('Generating Labels...')
@@ -231,7 +277,7 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
         labelListLocal[i] = labelDictLocal[labelListLocal[i]]
 
     myPrint('%d Files with %d Label(s): %s.' % (len(inputFilesLocal), len(labelDictLocal), list(labelDictLocal.keys())))
-    if pad:
+    if pad and 'Dur' != featureM:
         myPrint('Padding:', end='')
         for i in range(len(inputFilesLocal)):
             seqLen = len(inputFilesLocal[i])
@@ -243,6 +289,72 @@ def fileReader(folder, stepSz, featureM, channelM, classificationM, shuffle=True
 
     gc.collect()
     return inputFilesLocal, labelListLocal, labelDictLocal
+
+
+# function name is explanatory enough
+def trainTestkNNDTW(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, batchSz, labelLst, losFnc, optim,
+                    learnRate, featMode):
+    gc.collect()
+    clearGPU()
+    myPrint('---DTW Classifier---')
+
+    # xTraining = np.reshape(xTraining, (len(xTraining), -1))
+    # xTesting = np.reshape(xTesting, (len(xTesting), -1))
+    # yTraining = np.reshape(yTraining, (len(yTraining), -1))
+    # yTesting = np.reshape(yTesting, (len(yTesting), -1))
+
+    trainShape = np.shape(xTraining)
+    testShape = np.shape(xTesting)
+
+    myPrint('Train Batch:', trainShape)
+    myPrint('Test Batch:', testShape)
+
+    # create the model
+    model = kNNDTW.KnnDtw(n_neighbors=1, max_warping_window=10)
+    model.fit(xTraining, yTraining)
+    label, proba = model.predict(xTesting)
+    # todo - ai : needs more work here. label and yTesting is inconsistent
+    cls_rep = classification_report(label, yTesting, target_names=[l for l in labelLst])
+
+    conf_mat = confusion_matrix(label, yTesting)
+
+    myPrint('Labels:', labelLst)
+    myPrint('Confusion Matrix:')
+    # cm = confusion_matrix(yTesting, yPredict, labels=labelLst)
+    # myPrint(cm)
+    myPrint(pd.DataFrame(conf_mat,
+                         index=['t:{:}'.format(x) for x in labelLst],
+                         columns=['{:}'.format(x) for x in labelLst]))
+    myPrint('Classification Report:')
+    myPrint(cls_rep)
+
+    # Detailed stats, sample by sample prints. Uncomment with caution :). Also variable names are old. Needs refactor.
+    # fTest = filenames[-testSteps:]
+    # yPred = model.predict_classes(xTest)
+    # # yRat = model.predict(xTest)
+    # yProba = model.predict_proba(xTest)
+    #
+    # # show the inputs and predicted outputs
+    # for i in range(len(xTest)):
+    #     myPrint('File: %s ==> Predicted:%s   Real:%s -> OneHot:%s '
+    #           % (fTest[i], yPred[i], np.argmax(yTest[i]), yTest[i]), end='')
+    #     if yPred[i] == np.argmax(yTest[i]):
+    #         myPrint('+')
+    #     else:
+    #         myPrint('-------')
+    #     myPrint('Proba= %s' % yProba[i])
+    #     # myPrint("Ratios=%s" % yRat[i])
+
+    clearGPU()
+    gc.collect()
+    del xTraining
+    del xTesting
+    del yTraining
+    del yTesting
+    del labelLst
+    del model
+    gc.collect()
+    clearGPU()
 
 
 # function name is explanatory enough
@@ -343,7 +455,11 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     yPredict = [labelLst[i] for i in yPredict]
     myPrint('Labels:', labelLst)
     myPrint('Confusion Matrix:')
-    myPrint(confusion_matrix(yTesting, yPredict, labels=labelLst))
+    # cm = confusion_matrix(yTesting, yPredict, labels=labelLst)
+    # myPrint(cm)
+    myPrint(pd.DataFrame(confusion_matrix(yTesting, yPredict, labels=labelLst),
+                         index=['t:{:}'.format(x) for x in labelLst],
+                         columns=['{:}'.format(x) for x in labelLst]))
     myPrint('Classification Report:')
     myPrint(classification_report(yTesting, yPredict, labels=labelLst))
 
@@ -462,6 +578,7 @@ def runConfig(parameters):
     channelMode = parameters['channelMode']
     classificationMode = parameters['classificationMode']
     stepSize = parameters['stepSize']
+    sampRate = parameters['sampRate']
     batchSize = parameters['batchSize']
     learningRate = parameters['learningRate']
     lossFunction = parameters['lossFunction']
@@ -469,7 +586,8 @@ def runConfig(parameters):
     clsModel = parameters['clsModel']
 
     # use fileReader() for random shuffling every iteration. use some temp data for tests only. read explanations below
-    inputs, labels, labelDict = fileReader(folderInputs, stepSize, featureMode, channelMode, classificationMode)
+    inputs, labels, labelDict = fileReader(folderInputs, stepSize, sampRate, featureMode, channelMode,
+                                           classificationMode)
 
     # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
     # Best found way for comparing performances of different network variations
@@ -514,6 +632,11 @@ def runConfig(parameters):
     if clsModel in ['SVM', 'Both']:
         # Classify with SkLearn SVM Model
         trainTestSVM(xTrain, xTest, yTrain, yTest, list(labelDict.keys()))
+    gc.collect()
+    if clsModel in ['DTW', 'Both']:
+        # Classify with kNN DTW model
+        trainTestkNNDTW(xTrain, xTest, yTrain, yTest, numClasses, trainingEpoch, batchSize, list(labelDict.keys()),
+                        lossFunction, optimizer, learningRate, featureMode)
     gc.collect()
 
     del xTrain
