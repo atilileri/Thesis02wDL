@@ -85,7 +85,7 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
     maxLen = 0
     r = np.random.RandomState()
     randState = r.get_state()
-    imfFeatExt = '.imfFeat'
+    imfFeatExt = 'imfFeat'
     if 8 == sampRt:
         imfFeatExt = imfFeatExt + '8khz'
     elif 48 == sampRt:
@@ -101,11 +101,12 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
             np.random.shuffle(files)
         myPrint('Reading:', end='')
         for flname in files:
-            if (imfFeatExt in flname and featureM in ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh',
-                                                      'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh',
+            ext = flname.split('.')[-1]
+            if (imfFeatExt == ext and featureM in ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh',
+                                                   'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh',
                                                       ]) or \
-                    ('.wav' in flname and featureM in ['Wav', 'Dur']) or \
-                    ('.specto' in flname and featureM in ['Specto']):
+                    ('wav' == ext and featureM in ['Wav', 'Dur']) or \
+                    ('specto' == ext and featureM in ['Specto']):
                 # read file
                 if 'Wav' == featureM:
                     _, inputFile = scipy.io.wavfile.read(rootPath + flname)
