@@ -263,8 +263,7 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
 
 
 # function name is explanatory enough
-def trainTestkNNDTW(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, batchSz, labelLst, losFnc, optim,
-                    learnRate, featMode):
+def trainTestkNNDTW(xTraining, xTesting, yTraining, yTesting, labelLst):
     gc.collect()
     clearGPU()
     utils2.myPrint('---DTW Classifier---')
@@ -406,8 +405,6 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     yPredict = [labelLst[i] for i in yPredict]
     utils2.myPrint('Labels:', labelLst)
     utils2.myPrint('Confusion Matrix:')
-    # cm = confusion_matrix(yTesting, yPredict, labels=labelLst)
-    # utils2.myPrint(cm)
     utils2.myPrint(pd.DataFrame(confusion_matrix(yTesting, yPredict, labels=labelLst),
                    index=['t:{:}'.format(x) for x in labelLst],
                    columns=['{:}'.format(x) for x in labelLst]))
@@ -578,21 +575,22 @@ def runConfig(parameters):
                                                     stratify=labels, train_size=trainingSteps, test_size=testSteps)
 
     utils2.myPrint('------Model for %s------' % featureMode)
-    # todo - ai : Param 'Both' causes probable memory error: Process finished with exit code -1073741819 (0xC0000005)
-    if clsModel in ['LSTM', 'Both']:
+    if 'LSTM' == clsModel:
         # Classify with Keras LSTM Model
         trainTestLSTM(xTrain, xTest, yTrain, yTest, numClasses, trainingEpoch, batchSize, list(labelDict.keys()),
                       lossFunction, optimizer, learningRate, featureMode)
-    gc.collect()
-    if clsModel in ['SVM', 'Both']:
+        gc.collect()
+    elif 'SVM' == clsModel:
         # Classify with SkLearn SVM Model
         trainTestSVM(xTrain, xTest, yTrain, yTest, list(labelDict.keys()))
-    gc.collect()
-    if clsModel in ['DTW', 'Both']:
+        gc.collect()
+    elif 'DTW' == clsModel:
         # Classify with kNN DTW model
-        trainTestkNNDTW(xTrain, xTest, yTrain, yTest, numClasses, trainingEpoch, batchSize, list(labelDict.keys()),
-                        lossFunction, optimizer, learningRate, featureMode)
-    gc.collect()
+        trainTestkNNDTW(xTrain, xTest, yTrain, yTest, list(labelDict.keys()))
+        gc.collect()
+    else:
+        utils2.myPrint('ERROR: Invalid Classification Model:', clsModel)
+        sys.exit()
 
     del xTrain
     del yTrain
