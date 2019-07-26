@@ -1,12 +1,14 @@
 import sys
-import collections
-import itertools
+# import collections
+# import itertools
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import mode
 from scipy.spatial.distance import squareform
 from scipy.spatial.distance import euclidean
 from numpy.linalg import norm
+# from fastdtw import fastdtw
+import utils2
 plt.style.use('bmh')
 
 try:
@@ -29,17 +31,12 @@ class KnnDtw(object):
     max_warping_window : int, optional (default = infinity)
         Maximum warping window allowed by the DTW dynamic
         programming function
-
-    subsample_step : int, optional (default = 1)
-        Step size for the timeseries array. By setting subsample_step = 2,
-        the timeseries length will be reduced by 50% because every second
-        item is skipped. Implemented by x[:, ::subsample_step]
     """
 
-    def __init__(self, n_neighbors=5, max_warping_window=10000, subsample_step=1):
+    def __init__(self, n_neighbors=5, max_warping_window=10000):  # subsample_step=1):
         self.n_neighbors = n_neighbors
         self.max_warping_window = max_warping_window
-        self.subsample_step = subsample_step
+        # self.subsample_step = subsample_step
         self.x = None
         self.lbl = None
 
@@ -58,7 +55,7 @@ class KnnDtw(object):
         self.x = x
         self.lbl = l
 
-    # def _dtw_distance(self, ts_a, ts_b, d=lambda x, y: abs(x - y)):
+    # def _dtw_distance(self, ts_a, ts_b, d=lambda x, y: abs(x - y)):  # this was default
     # def _dtw_distance(self, ts_a, ts_b, d=lambda x, y: euclidean(x, y)):  # can give weights for each value in x and y
     def _dtw_distance(self, ts_a, ts_b, d=lambda x, y: norm(x - y)):  # faster than euclidean()
         """Returns the DTW similarity distance between two 2-D
@@ -132,8 +129,9 @@ class KnnDtw(object):
 
             for i in range(0, x_s[0] - 1):
                 for j in range(i + 1, x_s[0]):
-                    dm[dm_count] = self._dtw_distance(x[i, ::self.subsample_step],
-                                                      y[j, ::self.subsample_step])
+                    dm[dm_count] = self._dtw_distance(x[i], y[j])
+                    # dist = euclidean can be given below for weighted distance calculation
+                    # dm[dm_count], _ = fastdtw(x[i], y[j], dist=lambda x1, y1: norm(x1 - y1))
 
                     dm_count += 1
                     p.animate(dm_count)
@@ -153,8 +151,10 @@ class KnnDtw(object):
 
             for i in range(0, x_s[0]):
                 for j in range(0, y_s[0]):
-                    dm[i, j] = self._dtw_distance(x[i, ::self.subsample_step],
-                                                  y[j, ::self.subsample_step])
+                    dm[i, j] = self._dtw_distance(x[i], y[j])
+                    # dist = euclidean can be given below, for weighted distance calculation
+                    # dm[i, j], _ = fastdtw(x[i], y[j], dist=lambda x1, y1: norm(x1 - y1))
+
                     # Update progress bar
                     dm_count += 1
                     p.animate(dm_count)
@@ -206,7 +206,7 @@ class ProgressBar:
         self.animate = self.animate_ipython
 
     def animate_ipython(self, itera):
-        print('\r', self, sys.stdout.flush())
+        utils2.myPrint('\r', self, flush=True)
         self.update_iteration(itera + 1)
 
     def update_iteration(self, elapsed_iter):
