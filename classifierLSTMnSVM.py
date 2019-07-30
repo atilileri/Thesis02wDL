@@ -626,7 +626,7 @@ for cIdx in range(totalConfigurationCount):
                    (cIdx + 1, totalConfigurationCount, confStartTime.strftime('%Y.%m.%d %H:%M:%S')))
     utils2.myPrint('Parameters: ', end='')
     for param in parameterList:
-        print('%s : %s' % (param, str(parameterList[param])))
+        utils2.myPrint('%s : %s' % (param, str(parameterList[param])))
 
     runConfig(parameterList)
 
