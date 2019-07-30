@@ -8,23 +8,24 @@ import random
 inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/']
 # featureModes = ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh', 'Wav', 'Specto',
 #                 'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh']
-featureModes = ['Mags']
-# channelModes = ['0', '1', '2', '3', 'All', 'Front', 'Split', 'AllShfUni', 'AllShfRnd', '0Ov', '1Ov', '2Ov', '3Ov',
+featureModes = ['Freqs', 'Mags', 'Phases', 'nFreqs', 'nMags', 'nPhases']
+# channelModes = ['0', '1', '2', '3', 'Front', 'Split', '0Ov', '1Ov', '2Ov', '3Ov', 'All', 'AllShfUni', 'AllShfRnd',
 #                 'SplitOv']
 channelModes = ['SplitOv']
+# classificationModes = ['Speaker', 'Posture5', 'Posture3']
 classificationModes = ['Speaker', 'Posture5', 'Posture3']
-# classificationModes = ['Speaker']
-trainingEpochs = [300]
-stepSizes = [16]
 # sampRates = [8, 48]
 sampRates = [48]
+# stepSizes = [1, 4, 6, 16]
+stepSizes = [4]
+trainingEpochs = [300]
 batchSizes = [512]
 learningRates = [0.001]
 # lossFunctions = ['CatCrosEnt', 'KLDiv']
 lossFunctions = ['CatCrosEnt']
 # optimizers = ['Adam', 'Sgd', 'SgdNest', 'Adamax', 'Nadam', 'Rms']
 optimizers = ['Adam']
-# models = ['LSTM', 'SVM']
+# models = ['LSTM', 'SVM', 'DTW']
 models = ['LSTM']
 
 # fileCreationMode = 'One'  # appends all to 'conf0.txt'
@@ -35,12 +36,12 @@ countLimit = 0
 fileCounter = 0
 listOfParams = list()
 for inp in inputFolders:
-    for fm in featureModes:
-        for cm in channelModes:
-            for clm in classificationModes:
-                for te in trainingEpochs:
-                    for ss in stepSizes:
-                        for sr in sampRates:
+    for sr in sampRates:
+        for fm in featureModes:
+            for cm in channelModes:
+                for clm in classificationModes:
+                    for te in trainingEpochs:
+                        for ss in stepSizes:
                             for bs in batchSizes:
                                 for lr in learningRates:
                                     for lf in lossFunctions:
@@ -48,12 +49,12 @@ for inp in inputFolders:
                                             for m in models:
                                                 parameters = dict()
                                                 parameters['inputFolder'] = inp
+                                                parameters['sampRate'] = sr
                                                 parameters['featureMode'] = fm
                                                 parameters['channelMode'] = cm
                                                 parameters['classificationMode'] = clm
                                                 parameters['trainingEpoch'] = te
                                                 parameters['stepSize'] = ss
-                                                parameters['sampRate'] = sr
                                                 parameters['batchSize'] = bs
                                                 parameters['learningRate'] = lr
                                                 parameters['lossFunction'] = lf

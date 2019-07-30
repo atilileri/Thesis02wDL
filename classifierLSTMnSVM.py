@@ -624,7 +624,9 @@ for cIdx in range(totalConfigurationCount):
     confStartTime = datetime.now()
     utils2.myPrint('============ Config: %d/%d === Start Time: %s =======================================' %
                    (cIdx + 1, totalConfigurationCount, confStartTime.strftime('%Y.%m.%d %H:%M:%S')))
-    utils2.myPrint('Parameters:', parameterList)
+    utils2.myPrint('Parameters: ', end='')
+    for param in parameterList:
+        print('%s : %s' % (param, str(parameterList[param])))
 
     runConfig(parameterList)
 
