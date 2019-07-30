@@ -387,8 +387,8 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     # So myPrint it only to file with given info.
     for i in range(len(trainingResults.history['loss'])):
         utils2.myPrint('Epoch #%d: Loss:%.4f, Accuracy:%.4f, Validation Loss:%.4f, Validation Accuracy:%.4f'
-                % (i+1, trainingResults.history['loss'][i], trainingResults.history['acc'][i],
-                   trainingResults.history['val_loss'][i], trainingResults.history['val_acc'][i]), mode='file')
+                       % (i+1, trainingResults.history['loss'][i], trainingResults.history['acc'][i],
+                          trainingResults.history['val_loss'][i], trainingResults.history['val_acc'][i]), mode='file')
 
     utils2.myPrint(trainingResults.history, mode='code')
 
