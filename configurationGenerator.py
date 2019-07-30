@@ -4,6 +4,7 @@ import random
 # inputFolders = ['E:/atili/Datasets/BreathDataset/Processed/inputsFrom_mini_sample_set/']
 # inputFolders = ['E:/atili/Datasets/BreathDataset/Processed/inputsFrom_mid_sample_set/']
 # inputFolders = ['E:/atili/Datasets/BreathDataset/Processed_Small/inputsFrom_20190608_143805/']
+# inputFolders = ['C:/Users/ATIL/Desktop/Dataset/inputsFrom_max_sample_set/']
 
 inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/']
 # featureModes = ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh', 'Wav', 'Specto',
