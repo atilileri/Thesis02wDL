@@ -1,0 +1,16 @@
+======= Running File: classifierLSTMnSVM.py =======
+Reading Configuration from command line argument: C:\Users\ATIL\PycharmProjects\Thesis02wDL\confFiles\conf25.txt
+Total of 1 configuration(s) will be run
+============ Config: 1/1 === Start Time: 2019.07.23 19:46:27 =======================================
+Parameters: {'inputFolder': 'C:/Users/ATIL/Desktop/Dataset/inputsFrom_max_sample_set/', 'featureMode': 'Wav', 'channelMode': '0Ov', 'classificationMode': 'Speaker', 'trainingEpoch': 300, 'stepSize': 6, 'batchSize': 512, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt', 'optimizer': 'Adam', 'clsModel': 'LSTM'}
+Initial Scan.
+Shuffling...
+Reading:
+Generating Labels...
+0 Files with 0 Label(s): [].
+Padding:
+
+Total of 0 inputs loaded @ C:/Users/ATIL/Desktop/Dataset/inputsFrom_max_sample_set/
+Total of 0 classes
+0 steps for training, 0 steps for test
+Splitting Train and Test Data...
