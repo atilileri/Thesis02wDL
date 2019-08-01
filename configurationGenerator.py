@@ -28,6 +28,7 @@ lossFunctions = ['CatCrosEnt']
 optimizers = ['Adam']
 # models = ['LSTM', 'SVM', 'DTW']
 models = ['LSTM']
+classifierVersions = [0, 1, 2, 3]
 
 # fileCreationMode = 'One'  # appends all to 'conf0.txt'
 fileCreationMode = 'Each'  # creates N different 'conf[1-N].txt' files
@@ -48,20 +49,22 @@ for inp in inputFolders:
                                     for lf in lossFunctions:
                                         for o in optimizers:
                                             for m in models:
-                                                parameters = dict()
-                                                parameters['inputFolder'] = inp
-                                                parameters['sampRate'] = sr
-                                                parameters['featureMode'] = fm
-                                                parameters['channelMode'] = cm
-                                                parameters['classificationMode'] = clm
-                                                parameters['trainingEpoch'] = te
-                                                parameters['stepSize'] = ss
-                                                parameters['batchSize'] = bs
-                                                parameters['learningRate'] = lr
-                                                parameters['lossFunction'] = lf
-                                                parameters['optimizer'] = o
-                                                parameters['clsModel'] = m
-                                                listOfParams.append(parameters.copy())
+                                                for cv in classifierVersions:
+                                                    parameters = dict()
+                                                    parameters['inputFolder'] = inp
+                                                    parameters['sampRate'] = sr
+                                                    parameters['featureMode'] = fm
+                                                    parameters['channelMode'] = cm
+                                                    parameters['classificationMode'] = clm
+                                                    parameters['trainingEpoch'] = te
+                                                    parameters['stepSize'] = ss
+                                                    parameters['batchSize'] = bs
+                                                    parameters['learningRate'] = lr
+                                                    parameters['lossFunction'] = lf
+                                                    parameters['optimizer'] = o
+                                                    parameters['clsModel'] = m
+                                                    parameters['clsVersion'] = cv
+                                                    listOfParams.append(parameters.copy())
 if 0 < countLimit:
     fConf = None
     for i in range(countLimit):

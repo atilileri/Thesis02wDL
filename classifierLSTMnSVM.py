@@ -8,7 +8,14 @@ from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
 from keras.layers import Activation
+from keras.layers import Dropout
+from keras.layers import Flatten
+from keras.layers import Reshape
+from keras.layers.pooling import MaxPool1D
+from keras.layers.pooling import MaxPool2D
 from keras.layers.convolutional import Conv1D
+from keras.layers.convolutional import Conv2D
+from keras.layers.convolutional import Conv3D
 from keras import optimizers
 from keras import losses
 from sklearn.metrics import confusion_matrix, classification_report
@@ -46,7 +53,7 @@ def clearGPU():
 
 
 # prepare input for given params
-def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuffle=True, pad=True):
+def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuffle=True, pad=True, flatten=True):
     gc.collect()
     labelDictLocal = dict()
     labelListLocal = list()
@@ -173,7 +180,9 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
                         featSlice = slice(1, 5, 3)  # indexes: 1,4
                     elif 'PhnPh' == featureM:
                         featSlice = slice(2, 6, 3)  # indexes: 2,5
-                    elif featureM in ['Wav', 'Specto', 'FrMgPh', 'Dur']:
+                    elif 'FrMgPh' == featureM:
+                        featSlice = slice(0, 3)  # indexes: 0,1,2
+                    elif featureM in ['Wav', 'Specto', 'Dur']:
                         pass
                     else:
                         utils2.myPrint('ERROR: Invalid feature mode for file read:', featureM)
@@ -223,7 +232,8 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
                             inputFile = np.swapaxes(inputFile, 0, 1)
 
                         # flatten
-                        inputFile = np.reshape(inputFile, (seqLen, -1)).copy()
+                        if flatten:
+                            inputFile = np.reshape(inputFile, (seqLen, -1)).copy()
                         gc.collect()
                         if channelM in ['0Ov', '1Ov', '2Ov', '3Ov']:
                             inputFile = np.lib.stride_tricks.as_strided(inputFile, (seqLen-3, inputFile.shape[-1]*4),
@@ -309,7 +319,7 @@ def trainTestkNNDTW(xTraining, xTesting, yTraining, yTesting, labelLst):
 
 # function name is explanatory enough
 def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, batchSz, labelLst, losFnc, optim,
-                  learnRate, featMode):
+                  learnRate, featMode, clsVer):
     gc.collect()
     clearGPU()
     utils2.myPrint('---LSTM Classifier---')
@@ -322,17 +332,76 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     # create the model
     model = Sequential()
     if 'Specto' != featMode:  # do not convolve for spectogram, since it is not as long as other modes.
-        model.add(Conv1D(8, 48, strides=48, input_shape=trainShape[1:]))
-        model.add(Activation('relu'))
-        model.add(Conv1D(16, 24, strides=24))
-        model.add(Activation('sigmoid'))
-        model.add(LSTM(24, return_sequences=True))
-    else:
-        model.add(LSTM(24, return_sequences=True, input_shape=trainShape[1:]))
+        utils2.myPrint('Classifier Version:', clsVer)
+        if 0 == clsVer:
+            # inputs 1 # 300 epoch .3924.
+            model.add(Conv1D(8, 48, strides=48, input_shape=trainShape[1:]))
+            model.add(Activation('relu'))
+            model.add(Conv1D(16, 24, strides=24))
+            model.add(Activation('sigmoid'))
+            model.add(LSTM(24, return_sequences=True))
+            model.add(LSTM(12, return_sequences=False))
+            model.add(Dense(numCls, activation='softmax'))
+        elif 1 == clsVer:
+            # inputs 1 # 100epoch 0.5238 # 200epoch 0.4926 # 75 epoch sonrasi train set e overfit e basladi.
+            model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
+            model.add(Conv1D(16, 36, strides=6, activation='relu'))
+            model.add(Conv1D(32, 24, strides=2, activation='relu'))
+            model.add(Conv1D(64, 24, strides=2, activation='relu'))
+            model.add(LSTM(64, return_sequences=True))
+            model.add(LSTM(32, activation='relu', return_sequences=False))
+            model.add(Dense(numCls, activation='softmax'))
+        elif 2 == clsVer:
+            # inputs1 # 100: .4943, 200: .5468 # 100 epoch overfit basladi
+            model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(16, 36, strides=6, activation='relu'))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(32, 24, strides=2, activation='relu'))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(64, 24, strides=2, activation='relu'))
+            model.add(LSTM(64, return_sequences=True))
+            model.add(LSTM(32, activation='relu', return_sequences=False))
+            model.add(Dense(numCls, activation='softmax'))
+        elif 3 == clsVer:
+            # todo - ai : cont here
+            model.add(Conv1D(16, 60, strides=3, activation='relu', input_shape=trainShape[1:]))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(16, 48, strides=3, activation='relu'))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(32, 36, strides=3, activation='relu'))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(32, 24, strides=2, activation='relu'))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(64, 24, strides=2, activation='relu'))
+            model.add(Dropout(0.5))
+            model.add(LSTM(64, activation='relu', return_sequences=True))
+            model.add(LSTM(32, activation='relu', return_sequences=False))
+            model.add(Dense(numCls, activation='softmax'))
+        else:
+            utils2.myPrint('ERROR: Unknown Classifier Version')
+            sys.exit()
+        # model.add(Conv2D(filters=64, kernel_size=(2, 2), strides=2, padding='valid',
+        #                  activation='relu', input_shape=trainShape[1:]))
+        # model.add(Conv2D(filters=128, kernel_size=(2, 1), strides=1, padding='valid',
+        #                  activation='relu'))
+        # model.add(Reshape((3994, 128)))
+        # model.add(Conv3D(filters=128, kernel_size=(2, 1), strides=1, padding='valid',
+        #                  activation='relu'))
+        # model.add(Flatten())
+        # model.add(Conv3D(filters=128, kernel_size=3, strides=1, padding='valid',
+        #                  activation='relu'))
+        # model.add(Dropout(0.5))
+        # model.add(MaxPool1D(pool_size=2, strides=2, padding='valid'
+        #                     ))
+        # model.add(LSTM(128, activation='relu', return_sequences=True))
+    else:  # for Spectograms
+        utils2.myPrint('Classifier Version: Spectogram')
+        model.add(LSTM(24, activation='relu', return_sequences=True, input_shape=trainShape[1:]))
+        model.add(LSTM(32, activation='relu', return_sequences=False))
+        model.add(Dense(numCls, activation='softmax'))
 
-    model.add(LSTM(12, return_sequences=False))
-    model.add(Dense(numCls, activation='softmax'))
-    # model.add(Activation('softmax'))
+    utils2.printModelConfig(model.get_config())
 
     ##
     # Optimizer selection (Paper Refs: https://keras.io/optimizers/ and
@@ -379,7 +448,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
 
     # input('Press ENTER to continue with training:')
     utils2.myPrint('')
-    utils2.myPrint('Training:')
+    utils2.myPrint('Training:', flush=True)
     # Train
     trainingResults = model.fit(xTraining, yTraining,
                                 epochs=trainEpoch, batch_size=batchSz, validation_data=(xTesting, yTesting))
@@ -397,6 +466,8 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     utils2.myPrint('Test:')
     scores = model.evaluate(xTesting, yTesting, batch_size=testShape[0])
     utils2.myPrint('Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
+
+    # todo - ai : kfold cross validation can be inserted here
 
     # Stats by class
     yTesting = np.argmax(yTesting, axis=1)  # Convert one-hot to index
@@ -532,17 +603,20 @@ def runConfig(parameters):
     lossFunction = parameters['lossFunction']
     optimizer = parameters['optimizer']
     clsModel = parameters['clsModel']
+    clsVersion = parameters['clsVersion']
 
     if 'DTW' == clsModel:
         padding = False
     else:
         padding = True
+    # todo - ai : refactor after network trials
     # use fileReader() for random shuffling every iteration. use some temp data for tests only. read explanations below
     inputs, labels, labelDict = fileReader(folderInputs, stepSize, sampRate, featureMode, channelMode,
                                            classificationMode, pad=padding)
 
     # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
     # Best found way for comparing performances of different network variations
+    # utils2.myPrint('Inputs Shape:', np.shape(inputs))
     # input('Before. Press ENTER to continue:')
     # # save temp data (run fileReader() with uncommenting below, only once for saving random data)
     # saveData(inputsMags, 'C:/Users/atil/Desktop/tempDataStore/inputsMags.dat')
@@ -578,7 +652,7 @@ def runConfig(parameters):
     if 'LSTM' == clsModel:
         # Classify with Keras LSTM Model
         trainTestLSTM(xTrain, xTest, yTrain, yTest, numClasses, trainingEpoch, batchSize, list(labelDict.keys()),
-                      lossFunction, optimizer, learningRate, featureMode)
+                      lossFunction, optimizer, learningRate, featureMode, clsVersion)
         gc.collect()
     elif 'SVM' == clsModel:
         # Classify with SkLearn SVM Model

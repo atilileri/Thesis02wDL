@@ -86,3 +86,19 @@ plt.show()''')
             nb['cells'] = [cell1]
         nbf.write(nb, fOutNtb)
         fOutNtb.close()
+
+
+def printModelConfig(modelConfiguration):
+    myPrint('Model Layer Parameters:')
+    for layer in modelConfiguration['layers']:
+        if 'Conv1D' == layer['class_name']:
+            myPrint('Name: %s, Filters: %s, Kernel Size: %s, Strides: %s, Activation: %s.'
+                    % (layer['config']['name'],
+                       str(layer['config']['filters']),
+                       str(layer['config']['kernel_size']),
+                       str(layer['config']['strides']),
+                       layer['config']['activation']))
+        elif 'Dropout' == layer['class_name']:
+            myPrint('Name: %s, Rate: %s.' % (layer['config']['name'], str(layer['config']['rate'])))
+        elif 'LSTM' == layer['class_name']:
+            myPrint('Name: %s, Activation: %s.' % (layer['config']['name'], str(layer['config']['activation'])))
