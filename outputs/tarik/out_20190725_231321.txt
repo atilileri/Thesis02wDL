@@ -1,0 +1,15 @@
+======= Running File: classifierLSTMnSVM.py =======
+Reading Configuration from command line argument: C:\Users\ATIL\PycharmProjects\Thesis02wDL\confFiles\conf1.txt
+Total of 1 configuration(s) will be run
+============ Config: 1/1 === Start Time: 2019.07.25 23:13:21 =======================================
+Parameters: {'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/', 'featureMode': 'Freqs', 'channelMode': '0', 'classificationMode': 'Speaker', 'trainingEpoch': 300, 'stepSize': 1, 'sampRate': 8, 'batchSize': 512, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt', 'optimizer': 'Adam', 'clsModel': 'LSTM'}
+Initial Scan.
+
+Generating Labels...
+0 Files with 0 Label(s): [].
+Padding:
+
+Total of 0 inputs loaded @ D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/
+Total of 0 classes
+0 steps for training, 0 steps for test
+Splitting Train and Test Data...
