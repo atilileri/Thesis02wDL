@@ -53,7 +53,8 @@ def clearGPU():
 
 
 # prepare input for given params
-def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuffle=True, pad=True, flatten=True):
+def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM,
+               lenCutMs=0, shuffle=True, pad=True, flatten=True):
     gc.collect()
     labelDictLocal = dict()
     labelListLocal = list()
@@ -61,11 +62,11 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
     maxLen = 0
     r = np.random.RandomState()
     randState = r.get_state()
-    imfFeatExt = 'imfFeat'
+    imfFeatExt = 'imf'
     if 8 == sampRt:
-        imfFeatExt = imfFeatExt + '8khz'
+        imfFeatExt = imfFeatExt + '08'
     elif 48 == sampRt:
-        pass
+        imfFeatExt = imfFeatExt + '48'
     else:
         utils2.myPrint('ERROR: Invalid sampling rate parameter:', sampRt)
         sys.exit()
@@ -82,10 +83,13 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
                                                    'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh',
                                                    ]) or \
                     ('wav' == ext and featureM in ['Wav', 'Dur']) or \
-                    ('specto' == ext and featureM in ['Specto']):
+                    ('spct48' == ext and featureM in ['Specto']):
                 # read file
                 if 'Wav' == featureM:
-                    _, inputFile = scipy.io.wavfile.read(rootPath + flname)
+                    if 0 < lenCutMs:
+                        _, inputFile = scipy.io.wavfile.read(rootPath + flname)[:lenCutMs*sampRt]
+                    else:
+                        _, inputFile = scipy.io.wavfile.read(rootPath + flname)
                 elif 'Dur' == featureM:
                     # read duration features
                     parts = '.'.join(flname.split('.')[:-1])  # only name, without extension
@@ -95,7 +99,10 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
                     durationMs = float(parts[1]) * 1000
                     inputFile = [startMs, durationMs]
                 else:
-                    inputFile = loadData(rootPath + flname)
+                    if 0 < lenCutMs:
+                        inputFile = loadData(rootPath + flname)[:lenCutMs*sampRt]
+                    else:
+                        inputFile = loadData(rootPath + flname)
 
                 # read labels
                 speakerId = flname[0:2]
@@ -259,7 +266,7 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM, shuf
     utils2.myPrint('%d Files with %d Label(s): %s.' % (len(inputFilesLocal), len(labelDictLocal),
                                                        list(labelDictLocal.keys())))
     if pad and 'Dur' != featureM:
-        utils2.myPrint('Padding:', end='')
+        utils2.myPrint('Padding(', maxLen, 'ms):', end='')
         for i in range(len(inputFilesLocal)):
             seqLen = len(inputFilesLocal[i])
             diff = maxLen - seqLen
@@ -343,7 +350,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
             model.add(LSTM(12, return_sequences=False))
             model.add(Dense(numCls, activation='softmax'))
         elif 1 == clsVer:
-            # inputs 1 # 100epoch 0.5238 # 200epoch 0.4926 # 75 epoch sonrasi train set e overfit e basladi.
+            # inputs 1 # 100epoch: .5238, 200epoch: .4926 # 75 epoch sonrasi train set e overfit e basladi.
             model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
             model.add(Conv1D(16, 36, strides=6, activation='relu'))
             model.add(Conv1D(32, 24, strides=2, activation='relu'))
@@ -365,36 +372,29 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
             model.add(Dense(numCls, activation='softmax'))
         elif 3 == clsVer:
             # todo - ai : cont here
-            model.add(Conv1D(16, 60, strides=3, activation='relu', input_shape=trainShape[1:]))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(16, 48, strides=3, activation='relu'))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(32, 36, strides=3, activation='relu'))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(32, 24, strides=2, activation='relu'))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(64, 24, strides=2, activation='relu'))
-            model.add(Dropout(0.5))
-            model.add(LSTM(64, activation='relu', return_sequences=True))
-            model.add(LSTM(32, activation='relu', return_sequences=False))
+            #  lstm decay denenebilir
+            #  clipnorm and clipvalue denenebilir
+            #  try convlstm2d, gru, concatanate two models
+            # todo - ai : label encodingi disari tasi. label dict i sil ve string label dondur,
+            #  sonra labelEncoder -> to_categorical
+            #  sgd dene adam yerine
+            model.add(Conv1D(64, 11, strides=4, activation='relu', input_shape=trainShape[1:]))
+            # model.add(Activation('relu'))
+            model.add(Conv1D(64, 11, strides=4, activation='relu'))
+            model.add(Conv1D(32, 11, strides=4, activation='relu'))
+            model.add(Conv1D(32, 11, strides=2, activation='relu'))
+            model.add(Conv1D(16, 11, strides=2, activation='relu'))
+            model.add(Dropout(0.9))
+            # model.add(Activation('sigmoid'))
+            # model.add(LSTM(24, return_sequences=True))
+            model.add(LSTM(120, return_sequences=False, recurrent_dropout=0.5))
+            model.add(Dense(numCls*2))
             model.add(Dense(numCls, activation='softmax'))
         else:
             utils2.myPrint('ERROR: Unknown Classifier Version')
             sys.exit()
-        # model.add(Conv2D(filters=64, kernel_size=(2, 2), strides=2, padding='valid',
-        #                  activation='relu', input_shape=trainShape[1:]))
-        # model.add(Conv2D(filters=128, kernel_size=(2, 1), strides=1, padding='valid',
-        #                  activation='relu'))
-        # model.add(Reshape((3994, 128)))
-        # model.add(Conv3D(filters=128, kernel_size=(2, 1), strides=1, padding='valid',
-        #                  activation='relu'))
-        # model.add(Flatten())
-        # model.add(Conv3D(filters=128, kernel_size=3, strides=1, padding='valid',
-        #                  activation='relu'))
-        # model.add(Dropout(0.5))
-        # model.add(MaxPool1D(pool_size=2, strides=2, padding='valid'
-        #                     ))
-        # model.add(LSTM(128, activation='relu', return_sequences=True))
+            # model.add(Reshape((3994, 128)))
+            # model.add(Flatten())
     else:  # for Spectograms
         utils2.myPrint('Classifier Version: Spectogram')
         model.add(LSTM(24, activation='relu', return_sequences=True, input_shape=trainShape[1:]))
@@ -481,6 +481,11 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
                    columns=['{:}'.format(x) for x in labelLst]))
     utils2.myPrint('Classification Report:')
     utils2.myPrint(classification_report(yTesting, yPredict, labels=labelLst))
+
+    # save model for later use
+    utils2.myPrint('Saving model...', end=' ')
+    model.save('./models/model_'+utils2.scriptStartDateTime+'.clsmdl')
+    utils2.myPrint('Saved.')
 
     # Detailed stats, sample by sample prints. Uncomment with caution :). Also variable names are old. Needs refactor.
     # fTest = filenames[-testSteps:]
@@ -599,6 +604,7 @@ def runConfig(parameters):
     stepSize = parameters['stepSize']
     sampRate = parameters['sampRate']
     batchSize = parameters['batchSize']
+    lengthCut = parameters['lengthCut']
     learningRate = parameters['learningRate']
     lossFunction = parameters['lossFunction']
     optimizer = parameters['optimizer']
@@ -612,21 +618,33 @@ def runConfig(parameters):
     # todo - ai : refactor after network trials
     # use fileReader() for random shuffling every iteration. use some temp data for tests only. read explanations below
     inputs, labels, labelDict = fileReader(folderInputs, stepSize, sampRate, featureMode, channelMode,
-                                           classificationMode, pad=padding)
-
-    # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
-    # Best found way for comparing performances of different network variations
-    # utils2.myPrint('Inputs Shape:', np.shape(inputs))
+                                           classificationMode, lengthCut, pad=padding)
+    # # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
+    # # Best found way for comparing performances of different network variations
+    utils2.myPrint('Inputs Shape:', np.shape(inputs))
     # input('Before. Press ENTER to continue:')
     # # save temp data (run fileReader() with uncommenting below, only once for saving random data)
-    # saveData(inputsMags, 'C:/Users/atil/Desktop/tempDataStore/inputsMags.dat')
-    # saveData(filenames, 'C:/Users/atil/Desktop/tempDataStore/filenames.dat')
-    # saveData(labelDict, 'C:/Users/atil/Desktop/tempDataStore/labelDict.dat')
+    # saveData(inputs, 'C:/Users/atil/Desktop/tempDataStore/inputs5.dat')
+    # saveData(labels, 'C:/Users/atil/Desktop/tempDataStore/labels5.dat')
+    # saveData(labelDict, 'C:/Users/atil/Desktop/tempDataStore/labelDict5.dat')
 
-    # # load from temp data (uncomment below for loading, comment out fileReader() function)
-    # inputsMags = loadData('C:/Users/atil/Desktop/tempDataStore/inputsMags.dat')
-    # filenames = loadData('C:/Users/atil/Desktop/tempDataStore/filenames.dat')
-    # labelDict = loadData('C:/Users/atil/Desktop/tempDataStore/labelDict.dat')
+    # load from temp data (uncomment below for loading, comment out fileReader() function)
+
+    # utils2.myPrint('Loading Temp Data... ===ACTUAL CONFIG PARAMS MAY BE DIFFERENT===')
+    # InpNo FeatMod ChMod Flatten     Frq   StepSz LabelCount Details
+    # 1     mags    0     flat        8khz  1      15people   feature vector 7     - (3044, 7991,  7)
+    # 2     mags    0     flat        48khz 1      10people   feature vector 9     - (1960, 47711, 9)
+    # # 3     frmgph  0     unflattened 8khz  1      5people    feature matrix 3,7   - (1086, 7991,  3, 7)
+    # # 4     frmgph  All   unflattened 8khz  1      5people    feature matrix 4,3,7 - (1086, 7991,  4, 3, 7)
+    # 5     mags    0     flat        48khz 1      5people    feature vector 9     - (1086, 47951, 9)
+    # tempDatasetId = 1
+    # inputs = loadData('C:/Users/atil/Desktop/tempDataStore/inputs'+str(tempDatasetId)+'.dat')
+    # inputs = inputs[:200]
+    # labels = loadData('C:/Users/atil/Desktop/tempDataStore/labels'+str(tempDatasetId)+'.dat')
+    # labels = labels[:200]
+    # labelDict = loadData('C:/Users/atil/Desktop/tempDataStore/labelDict'+str(tempDatasetId)+'.dat')
+    # utils2.myPrint('Inputs Shape:', np.shape(inputs))
+
     # input('After. Press ENTER to continue:')
 
     numClasses = len(labelDict)  # total number of classification classes (ie. people)

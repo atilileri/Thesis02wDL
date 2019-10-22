@@ -21,6 +21,8 @@ sampRates = [48]
 stepSizes = [4]
 trainingEpochs = [300]
 batchSizes = [512]
+# lengthCuts = [300, 400, 500, 600, 700]
+lengthCuts = [500]
 learningRates = [0.001]
 # lossFunctions = ['CatCrosEnt', 'KLDiv']
 lossFunctions = ['CatCrosEnt']
@@ -45,26 +47,28 @@ for inp in inputFolders:
                     for te in trainingEpochs:
                         for ss in stepSizes:
                             for bs in batchSizes:
-                                for lr in learningRates:
-                                    for lf in lossFunctions:
-                                        for o in optimizers:
-                                            for m in models:
-                                                for cv in classifierVersions:
-                                                    parameters = dict()
-                                                    parameters['inputFolder'] = inp
-                                                    parameters['sampRate'] = sr
-                                                    parameters['featureMode'] = fm
-                                                    parameters['channelMode'] = cm
-                                                    parameters['classificationMode'] = clm
-                                                    parameters['trainingEpoch'] = te
-                                                    parameters['stepSize'] = ss
-                                                    parameters['batchSize'] = bs
-                                                    parameters['learningRate'] = lr
-                                                    parameters['lossFunction'] = lf
-                                                    parameters['optimizer'] = o
-                                                    parameters['clsModel'] = m
-                                                    parameters['clsVersion'] = cv
-                                                    listOfParams.append(parameters.copy())
+                                for lc in lengthCuts:
+                                    for lr in learningRates:
+                                        for lf in lossFunctions:
+                                            for o in optimizers:
+                                                for m in models:
+                                                    for cv in classifierVersions:
+                                                        parameters = dict()
+                                                        parameters['inputFolder'] = inp
+                                                        parameters['sampRate'] = sr
+                                                        parameters['featureMode'] = fm
+                                                        parameters['channelMode'] = cm
+                                                        parameters['classificationMode'] = clm
+                                                        parameters['trainingEpoch'] = te
+                                                        parameters['stepSize'] = ss
+                                                        parameters['batchSize'] = bs
+                                                        parameters['lengthCut'] = lc
+                                                        parameters['learningRate'] = lr
+                                                        parameters['lossFunction'] = lf
+                                                        parameters['optimizer'] = o
+                                                        parameters['clsModel'] = m
+                                                        parameters['clsVersion'] = cv
+                                                        listOfParams.append(parameters.copy())
 if 0 < countLimit:
     fConf = None
     for i in range(countLimit):
