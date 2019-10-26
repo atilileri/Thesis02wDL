@@ -101,4 +101,6 @@ def printModelConfig(modelConfiguration):
         elif 'Dropout' == layer['class_name']:
             myPrint('Name: %s, Rate: %s.' % (layer['config']['name'], str(layer['config']['rate'])))
         elif 'LSTM' == layer['class_name']:
-            myPrint('Name: %s, Activation: %s.' % (layer['config']['name'], str(layer['config']['activation'])))
+            myPrint('Name: %s, Units: %s, Activation: %s.' % (layer['config']['name'],
+                                                              str(layer['config']['units']),
+                                                              str(layer['config']['activation'])))
