@@ -5,10 +5,8 @@ import numpy as np
 from datetime import datetime
 from keras import backend
 from keras.models import Sequential
-from keras.layers import Dense
-from keras.layers import LSTM
-from keras.layers import Activation
-from keras.layers import Dropout
+from keras.layers import Dense, LSTM, Activation, Dropout
+from keras.layers import GRU
 from keras.layers import Flatten
 from keras.layers import Reshape
 from keras.layers.pooling import MaxPool1D
@@ -16,6 +14,8 @@ from keras.layers.pooling import MaxPool2D
 from keras.layers.convolutional import Conv1D
 from keras.layers.convolutional import Conv2D
 from keras.layers.convolutional import Conv3D
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from keras.models import load_model
 from keras import optimizers
 from keras import losses
 from sklearn.metrics import confusion_matrix, classification_report
@@ -338,6 +338,11 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
 
     # create the model
     model = Sequential()
+    # todo - ai : possible variations
+    #  try lstm decay
+    #  try clipnorm and clipvalue
+    #  try convlstm2d and/or concatanate two models
+    #  try sgd instead of adam optimizer
     if 'Specto' != featMode:  # do not convolve for spectogram, since it is not as long as other modes.
         utils2.myPrint('Classifier Version:', clsVer)
         if 0 == clsVer:
@@ -350,7 +355,6 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
             model.add(LSTM(12, return_sequences=False))
             model.add(Dense(numCls, activation='softmax'))
         elif 1 == clsVer:
-            # inputs 1 # 100epoch: .5238, 200epoch: .4926 # 75 epoch sonrasi train set e overfit e basladi.
             model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
             model.add(Conv1D(16, 36, strides=6, activation='relu'))
             model.add(Conv1D(32, 24, strides=2, activation='relu'))
@@ -359,7 +363,19 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
             model.add(LSTM(32, activation='relu', return_sequences=False))
             model.add(Dense(numCls, activation='softmax'))
         elif 2 == clsVer:
-            # inputs1 # 100: .4943, 200: .5468 # 100 epoch overfit basladi
+            # resulted better than LSTM variant(1 == clsVer) with following configuration
+            # {'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/4spkr5post/', 'featureMode': 'Mags',
+            # 'channelMode': '0', 'classificationMode': 'Speaker', 'trainingEpoch': 200, 'stepSize': 0, 'sampRate': 48,
+            # 'batchSize': 32, 'lengthCut': 600, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt',
+            # 'optimizer': 'Adam', 'clsModel': 'LSTM', 'clsVersion': 2}
+            model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
+            model.add(Conv1D(16, 36, strides=6, activation='relu'))
+            model.add(Conv1D(32, 24, strides=2, activation='relu'))
+            model.add(Conv1D(64, 24, strides=2, activation='relu'))
+            model.add(GRU(64, return_sequences=True))
+            model.add(GRU(32, activation='relu', return_sequences=False))
+            model.add(Dense(numCls, activation='softmax'))
+        elif 3 == clsVer:
             model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
             model.add(Dropout(0.5))
             model.add(Conv1D(16, 36, strides=6, activation='relu'))
@@ -370,31 +386,18 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
             model.add(LSTM(64, return_sequences=True))
             model.add(LSTM(32, activation='relu', return_sequences=False))
             model.add(Dense(numCls, activation='softmax'))
-        elif 3 == clsVer:
-            # todo - ai : cont here
-            #  lstm decay denenebilir
-            #  clipnorm and clipvalue denenebilir
-            #  try convlstm2d, gru, concatanate two models
-            # todo - ai : label encodingi disari tasi. label dict i sil ve string label dondur,
-            #  sonra labelEncoder -> to_categorical
-            #  sgd dene adam yerine
-            model.add(Conv1D(64, 11, strides=4, activation='relu', input_shape=trainShape[1:]))
-            # model.add(Activation('relu'))
-            model.add(Conv1D(64, 11, strides=4, activation='relu'))
-            model.add(Conv1D(32, 11, strides=4, activation='relu'))
-            model.add(Conv1D(32, 11, strides=2, activation='relu'))
-            model.add(Conv1D(16, 11, strides=2, activation='relu'))
-            model.add(Dropout(0.9))
-            # model.add(Activation('sigmoid'))
-            # model.add(LSTM(24, return_sequences=True))
-            model.add(LSTM(120, return_sequences=False, recurrent_dropout=0.5))
-            model.add(Dense(numCls*2))
+        elif 4 == clsVer:
+            # todo - ai : this is temp clsVer. give a static version number to successful model structures
+            model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
+            model.add(Conv1D(16, 36, strides=6, activation='relu'))
+            model.add(Conv1D(32, 24, strides=2, activation='relu'))
+            model.add(Conv1D(64, 24, strides=2, activation='relu'))
+            model.add(GRU(64, return_sequences=True))
+            model.add(GRU(32, activation='relu', return_sequences=False))
             model.add(Dense(numCls, activation='softmax'))
         else:
             utils2.myPrint('ERROR: Unknown Classifier Version')
             sys.exit()
-            # model.add(Reshape((3994, 128)))
-            # model.add(Flatten())
     else:  # for Spectograms
         utils2.myPrint('Classifier Version: Spectogram')
         model.add(LSTM(24, activation='relu', return_sequences=True, input_shape=trainShape[1:]))
@@ -449,9 +452,18 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     # input('Press ENTER to continue with training:')
     utils2.myPrint('')
     utils2.myPrint('Training:', flush=True)
+    # prepare callbacks
+    earlyStopping = EarlyStopping(monitor='acc', mode='max', patience=trainEpoch//4, restore_best_weights=True,
+                                  verbose=1)
+    # save best model for later use
+    modelSaving = ModelCheckpoint('./models/model_'+utils2.scriptStartDateTime+'.clsmdl', monitor='acc', mode='max',
+                                  save_best_only=True, verbose=1)
+    reduceLrLoss = ReduceLROnPlateau(monitor='acc', mode='max', factor=0.5, cooldown=trainEpoch//40,
+                                     patience=trainEpoch//40, min_lr=learnRate/20, verbose=1)
     # Train
-    trainingResults = model.fit(xTraining, yTraining,
-                                epochs=trainEpoch, batch_size=batchSz, validation_data=(xTesting, yTesting))
+    trainingResults = model.fit(xTraining, yTraining, epochs=trainEpoch, batch_size=batchSz,
+                                validation_data=(xTesting, yTesting),
+                                callbacks=[earlyStopping, modelSaving, reduceLrLoss])
     # model.fit() function prints to console but we can not grab it as it is.
     # So myPrint it only to file with given info.
     for i in range(len(trainingResults.history['loss'])):
@@ -461,8 +473,11 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
 
     utils2.myPrint(trainingResults.history, mode='code')
 
-    # Final evaluation of the model
     utils2.myPrint('')
+    # Restore best Model
+    utils2.myPrint('Restoring best model...')
+    model = load_model('./models/model_'+utils2.scriptStartDateTime+'.clsmdl')
+    # Final evaluation of the model
     utils2.myPrint('Test:')
     scores = model.evaluate(xTesting, yTesting, batch_size=testShape[0])
     utils2.myPrint('Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
@@ -481,11 +496,6 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
                    columns=['{:}'.format(x) for x in labelLst]))
     utils2.myPrint('Classification Report:')
     utils2.myPrint(classification_report(yTesting, yPredict, labels=labelLst))
-
-    # save model for later use
-    utils2.myPrint('Saving model...', end=' ')
-    model.save('./models/model_'+utils2.scriptStartDateTime+'.clsmdl')
-    utils2.myPrint('Saved.')
 
     # Detailed stats, sample by sample prints. Uncomment with caution :). Also variable names are old. Needs refactor.
     # fTest = filenames[-testSteps:]

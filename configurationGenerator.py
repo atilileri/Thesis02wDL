@@ -9,18 +9,18 @@ import random
 inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/inputsFrom_max_sample_set/']
 # featureModes = ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh', 'Wav', 'Specto',
 #                 'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh']
-featureModes = ['Freqs', 'Mags', 'Phases', 'nFreqs', 'nMags', 'nPhases']
+featureModes = ['Freqs', 'Mags', 'Phases']
 # channelModes = ['0', '1', '2', '3', 'Front', 'Split', '0Ov', '1Ov', '2Ov', '3Ov', 'All', 'AllShfUni', 'AllShfRnd',
 #                 'SplitOv']
-channelModes = ['SplitOv']
+channelModes = ['0']
 # classificationModes = ['Speaker', 'Posture5', 'Posture3']
 classificationModes = ['Speaker', 'Posture5', 'Posture3']
 # sampRates = [8, 48]
 sampRates = [48]
 # stepSizes = [1, 4, 6, 16]
-stepSizes = [4]
-trainingEpochs = [300]
-batchSizes = [512]
+stepSizes = [0]
+trainingEpochs = [400]
+batchSizes = [128]
 # lengthCuts = [300, 400, 500, 600, 700]
 lengthCuts = [500]
 learningRates = [0.001]
@@ -30,7 +30,7 @@ lossFunctions = ['CatCrosEnt']
 optimizers = ['Adam']
 # models = ['LSTM', 'SVM', 'DTW']
 models = ['LSTM']
-classifierVersions = [0, 1, 2, 3]
+classifierVersions = [1, 2]
 
 # fileCreationMode = 'One'  # appends all to 'conf0.txt'
 fileCreationMode = 'Each'  # creates N different 'conf[1-N].txt' files
