@@ -6,7 +6,7 @@ from datetime import datetime
 from keras import backend
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Activation, Dropout
-from keras.layers import GRU
+from keras.layers import GRU, CuDNNGRU, CuDNNLSTM
 from keras.layers import Flatten
 from keras.layers import Reshape
 from keras.layers.pooling import MaxPool1D
@@ -27,6 +27,7 @@ import scipy.io.wavfile
 import pandas as pd
 import kNNDTW
 import utils2
+import joblib
 
 
 def durToStr(dur):
@@ -40,12 +41,20 @@ def durToStr(dur):
 
 # Loads data from file into variable
 def loadData(path):
-    return pickle.load(open(path, 'rb'))
+    try:
+        return pickle.load(open(path, 'rb'))
+    except pickle.UnpicklingError:
+        utils2.myPrint('Not a pickle file, trying joblib...')
+        return joblib.load(path)
 
 
 # Saves variable data to file
 def saveData(data, path):
-    pickle.dump(data, open(path, "wb"))
+    try:
+        pickle.dump(data, open(path, "wb"))
+    except (MemoryError, OverflowError):
+        utils2.myPrint('Pickle failed to save, trying joblib...')
+        joblib.dump(data, path)
 
 
 def clearGPU():
@@ -266,7 +275,10 @@ def fileReader(folder, stepSz, sampRt, featureM, channelM, classificationM,
     utils2.myPrint('%d Files with %d Label(s): %s.' % (len(inputFilesLocal), len(labelDictLocal),
                                                        list(labelDictLocal.keys())))
     if pad and 'Dur' != featureM:
-        utils2.myPrint('Padding(', maxLen, 'ms):', end='')
+        msLen = maxLen / sampRt  # calculate length in milliseconds
+        if stepSz > 0:
+            msLen *= stepSz
+        utils2.myPrint('Padding(', msLen, 'ms):', end='')
         for i in range(len(inputFilesLocal)):
             seqLen = len(inputFilesLocal[i])
             diff = maxLen - seqLen
@@ -368,6 +380,11 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
             # 'channelMode': '0', 'classificationMode': 'Speaker', 'trainingEpoch': 200, 'stepSize': 0, 'sampRate': 48,
             # 'batchSize': 32, 'lengthCut': 600, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt',
             # 'optimizer': 'Adam', 'clsModel': 'LSTM', 'clsVersion': 2}
+            # overfitted with 1.000 accuracy(started around 30th epoch) with following configuration
+            # {'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/allSmall/', 'featureMode': 'Mags',
+            # 'channelMode': '0', 'classificationMode': 'Speaker', 'trainingEpoch': 400, 'stepSize': 0, 'sampRate': 48,
+            # 'batchSize': 32, 'lengthCut': 600, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt',
+            # 'optimizer': 'Adam', 'clsModel': 'LSTM', 'clsVersion': 2}
             model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
             model.add(Conv1D(16, 36, strides=6, activation='relu'))
             model.add(Conv1D(32, 24, strides=2, activation='relu'))
@@ -387,13 +404,56 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
             model.add(LSTM(32, activation='relu', return_sequences=False))
             model.add(Dense(numCls, activation='softmax'))
         elif 4 == clsVer:
+            model.add(Conv1D(16, 96, strides=12, input_shape=trainShape[1:]))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(32, 48, strides=6))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(64, 24, strides=2))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(64, return_sequences=True))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(64, return_sequences=True))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(32, return_sequences=False))
+            model.add(Dense(numCls, activation='softmax'))
+        elif 5 == clsVer:
+            model.add(Conv1D(16, 96, strides=12, input_shape=trainShape[1:]))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(32, 48, strides=6))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(64, 24, strides=2))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(64, return_sequences=True))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(32, return_sequences=False))
+            model.add(Dense(numCls, activation='softmax'))
+        elif 6 == clsVer:
             # todo - ai : this is temp clsVer. give a static version number to successful model structures
-            model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
-            model.add(Conv1D(16, 36, strides=6, activation='relu'))
-            model.add(Conv1D(32, 24, strides=2, activation='relu'))
-            model.add(Conv1D(64, 24, strides=2, activation='relu'))
-            model.add(GRU(64, return_sequences=True))
-            model.add(GRU(32, activation='relu', return_sequences=False))
+            # same ase clsVer==5 but, strides are halved for trials of stepsize==2 parameter
+            model.add(Conv1D(16, 96, strides=6, input_shape=trainShape[1:]))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(32, 48, strides=3))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(64, 24, strides=2))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(64, return_sequences=True))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(32, return_sequences=False))
+            model.add(Dense(numCls, activation='softmax'))
+        elif 7 == clsVer:
+            # todo - ai : this is temp clsVer. give a static version number to successful model structures
+            # same as clsVer==4 but, strides are halved for trials of stepsize==2 parameter
+            model.add(Conv1D(16, 96, strides=6, input_shape=trainShape[1:]))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(32, 48, strides=3))
+            model.add(Dropout(0.5))
+            model.add(Conv1D(64, 24, strides=2))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(64, return_sequences=True))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(64, return_sequences=True))
+            model.add(Dropout(0.5))
+            model.add(CuDNNGRU(32, return_sequences=False))
             model.add(Dense(numCls, activation='softmax'))
         else:
             utils2.myPrint('ERROR: Unknown Classifier Version')
@@ -453,13 +513,19 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     utils2.myPrint('')
     utils2.myPrint('Training:', flush=True)
     # prepare callbacks
-    earlyStopping = EarlyStopping(monitor='acc', mode='max', patience=trainEpoch//4, restore_best_weights=True,
-                                  verbose=1)
+    earlyStopping = EarlyStopping(monitor='val_loss', mode='min', patience=45, min_delta=1e-4,
+                                  restore_best_weights=True, verbose=1)
     # save best model for later use
-    modelSaving = ModelCheckpoint('./models/model_'+utils2.scriptStartDateTime+'.clsmdl', monitor='acc', mode='max',
-                                  save_best_only=True, verbose=1)
-    reduceLrLoss = ReduceLROnPlateau(monitor='acc', mode='max', factor=0.5, cooldown=trainEpoch//40,
-                                     patience=trainEpoch//40, min_lr=learnRate/20, verbose=1)
+    # xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, batchSz, labelLst, losFnc, optim,
+    #                   learnRate, featMode, clsVer):
+
+    modelName = 'model_' + utils2.scriptStartDateTime + '_numCls-'+str(numCls) + '_loss-'+losFnc + '_opt-'+optim + \
+                '_lr-'+str(learnRate) + '_featMode-'+featMode + '_clsVer-'+str(clsVer) + '.clsmdl'
+    modelPath = './models/' + modelName
+    modelSaving = ModelCheckpoint(modelPath, monitor='val_loss',
+                                  mode='min', save_best_only=True, verbose=1)
+    reduceLrLoss = ReduceLROnPlateau(monitor='val_loss', mode='min', factor=0.5, cooldown=10,
+                                     patience=10, min_delta=1e-4, min_lr=learnRate/32, verbose=1)
     # Train
     trainingResults = model.fit(xTraining, yTraining, epochs=trainEpoch, batch_size=batchSz,
                                 validation_data=(xTesting, yTesting),
@@ -476,11 +542,16 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     utils2.myPrint('')
     # Restore best Model
     utils2.myPrint('Restoring best model...')
-    model = load_model('./models/model_'+utils2.scriptStartDateTime+'.clsmdl')
+    model = load_model(modelPath)
     # Final evaluation of the model
     utils2.myPrint('Test:')
     scores = model.evaluate(xTesting, yTesting, batch_size=testShape[0])
     utils2.myPrint('Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
+
+    # write results to a seperate text file (part 2/2)
+    fResult = open('./Results.txt', 'a+')
+    fResult.write(', ' + modelName + ', Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
+    fResult.close()
 
     # todo - ai : kfold cross validation can be inserted here
 
@@ -625,37 +696,53 @@ def runConfig(parameters):
         padding = False
     else:
         padding = True
-    # todo - ai : refactor after network trials
-    # use fileReader() for random shuffling every iteration. use some temp data for tests only. read explanations below
-    inputs, labels, labelDict = fileReader(folderInputs, stepSize, sampRate, featureMode, channelMode,
-                                           classificationMode, lengthCut, pad=padding)
-    # # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
-    # # Best found way for comparing performances of different network variations
+
+    saveLoadData = True
+    # check if inputs prepared before
+    inputsFileName = 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/temp' \
+                     'DataStorage/{}_inputs_{}_{}_{}_{}_{}_{}_{}.dat'\
+        .format(os.path.basename(os.path.dirname(folderInputs)), featureMode, channelMode, classificationMode,
+                stepSize, sampRate, lengthCut, padding)
+    labelsFileName = 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/temp' \
+                     'DataStorage/{}_labels_{}_{}_{}_{}_{}_{}_{}.dat'\
+        .format(os.path.basename(os.path.dirname(folderInputs)), featureMode, channelMode, classificationMode,
+                stepSize, sampRate, lengthCut, padding)
+    labelDictFileName = 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/temp' \
+                        'DataStorage/{}_labelDict_{}_{}_{}_{}_{}_{}_{}.dat'\
+        .format(os.path.basename(os.path.dirname(folderInputs)), featureMode, channelMode, classificationMode,
+                stepSize, sampRate, lengthCut, padding)
+
+    if os.path.exists(inputsFileName) and os.path.exists(labelsFileName)\
+            and os.path.exists(labelDictFileName) and saveLoadData:
+        utils2.myPrint('Loading from Previous Data Files...')
+        inputs = loadData(inputsFileName)
+        utils2.myPrint('Loaded:', inputsFileName)
+        labels = loadData(labelsFileName)
+        utils2.myPrint('Loaded:', labelsFileName)
+        labelDict = loadData(labelDictFileName)
+        utils2.myPrint('Loaded:', labelDictFileName)
+    else:
+        # use fileReader() for random shuffling every iteration. use some temp data for tests only (using saveLoadData).
+        inputs, labels, labelDict = fileReader(folderInputs, stepSize, sampRate, featureMode, channelMode,
+                                               classificationMode, lengthCut, pad=padding)
+        # Save some randomly shuffled data, then load them each run, instead of shuffling every run.
+        # Best found way for comparing performances of different network variations
+        if saveLoadData:
+            utils2.myPrint('Saving Data Files for Later Use...')
+            saveData(inputs, inputsFileName)
+            utils2.myPrint('Saved:', inputsFileName)
+            saveData(labels, labelsFileName)
+            utils2.myPrint('Saved:', labelsFileName)
+            saveData(labelDict, labelDictFileName)
+            utils2.myPrint('Saved:', labelDictFileName)
+
+    # write results to a seperate text file (part 1/2)
+    fResult = open('./Results.txt', 'a+')
+    fResult.write('\n\r ' + utils2.scriptStartDateTime + ', ')
+    print(parameters, end='', file=fResult)
+    fResult.close()
+
     utils2.myPrint('Inputs Shape:', np.shape(inputs))
-    # input('Before. Press ENTER to continue:')
-    # # save temp data (run fileReader() with uncommenting below, only once for saving random data)
-    # saveData(inputs, 'C:/Users/atil/Desktop/tempDataStore/inputs5.dat')
-    # saveData(labels, 'C:/Users/atil/Desktop/tempDataStore/labels5.dat')
-    # saveData(labelDict, 'C:/Users/atil/Desktop/tempDataStore/labelDict5.dat')
-
-    # load from temp data (uncomment below for loading, comment out fileReader() function)
-
-    # utils2.myPrint('Loading Temp Data... ===ACTUAL CONFIG PARAMS MAY BE DIFFERENT===')
-    # InpNo FeatMod ChMod Flatten     Frq   StepSz LabelCount Details
-    # 1     mags    0     flat        8khz  1      15people   feature vector 7     - (3044, 7991,  7)
-    # 2     mags    0     flat        48khz 1      10people   feature vector 9     - (1960, 47711, 9)
-    # # 3     frmgph  0     unflattened 8khz  1      5people    feature matrix 3,7   - (1086, 7991,  3, 7)
-    # # 4     frmgph  All   unflattened 8khz  1      5people    feature matrix 4,3,7 - (1086, 7991,  4, 3, 7)
-    # 5     mags    0     flat        48khz 1      5people    feature vector 9     - (1086, 47951, 9)
-    # tempDatasetId = 1
-    # inputs = loadData('C:/Users/atil/Desktop/tempDataStore/inputs'+str(tempDatasetId)+'.dat')
-    # inputs = inputs[:200]
-    # labels = loadData('C:/Users/atil/Desktop/tempDataStore/labels'+str(tempDatasetId)+'.dat')
-    # labels = labels[:200]
-    # labelDict = loadData('C:/Users/atil/Desktop/tempDataStore/labelDict'+str(tempDatasetId)+'.dat')
-    # utils2.myPrint('Inputs Shape:', np.shape(inputs))
-
-    # input('After. Press ENTER to continue:')
 
     numClasses = len(labelDict)  # total number of classification classes (ie. people)
 
