@@ -104,3 +104,7 @@ def printModelConfig(modelConfiguration):
             myPrint('Name: %s, Units: %s, Activation: %s.' % (layer['config']['name'],
                                                               str(layer['config']['units']),
                                                               str(layer['config']['activation'])))
+        else:
+            myPrint('Name: %s' % (layer['config']['name']))
+
+

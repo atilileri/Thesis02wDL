@@ -4,22 +4,22 @@ import random
 # inputFolders = ['E:/atili/Datasets/BreathDataset/Processed/inputsFrom_mini_sample_set/']
 # inputFolders = ['E:/atili/Datasets/BreathDataset/Processed/inputsFrom_mid_sample_set/']
 # inputFolders = ['E:/atili/Datasets/BreathDataset/Processed_Small/inputsFrom_20190608_143805/']
-# inputFolders = ['C:/Users/ATIL/Desktop/Dataset/inputsFrom_max_sample_set/']
 
-inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/allSmall/']
+# inputFolders = ['D:/atili/MMIExt/Audacity/METU Recordings/Dataset/allSmall/']
+inputFolders = ['E:/atili/Datasets/BreathDataset/Processed/Inputs_Max_20191020/inputsFrom_02-10/']
 # featureModes = ['Freqs', 'Mags', 'Phases', 'FrMg', 'MgPh', 'FrPh', 'FrMgPh', 'Wav', 'Specto',
 #                 'nFreqs', 'nMags', 'nPhases', 'FrnFr', 'MgnMg', 'PhnPh']
-featureModes = ['Mags']
+featureModes = ['FrMgPh']
 # channelModes = ['0', '1', '2', '3', 'Front', 'Split', '0Ov', '1Ov', '2Ov', '3Ov', 'All', 'AllShfUni', 'AllShfRnd',
 #                 'SplitOv']
-channelModes = ['Split', 'All']
+channelModes = ['All']
 # classificationModes = ['Speaker', 'Posture5', 'Posture3']
-classificationModes = ['Speaker', 'Posture5']
+classificationModes = ['Speaker', 'Posture5', 'Posture3']
 # sampRates = [8, 48]
 sampRates = [48]
 # stepSizes = [1, 4, 6, 16]
-stepSizes = [2]
-trainingEpochs = [400]
+stepSizes = [8]
+trainingEpochs = [1000]
 batchSizes = [64]
 # lengthCuts = [300, 400, 500, 600, 700]
 lengthCuts = [600]
@@ -30,7 +30,7 @@ lossFunctions = ['CatCrosEnt']
 optimizers = ['Adam']
 # models = ['LSTM', 'SVM', 'DTW']
 models = ['LSTM']
-classifierVersions = [4, 5, 6, 7]
+classifierVersions = [[4, 5, 6, 7]]
 
 # fileCreationMode = 'One'  # appends all to 'conf0.txt'
 fileCreationMode = 'Each'  # creates N different 'conf[1-N].txt' files

@@ -6,7 +6,7 @@ from datetime import datetime
 from keras import backend
 from keras.models import Sequential
 from keras.layers import Dense, LSTM, Activation, Dropout
-from keras.layers import GRU, CuDNNGRU, CuDNNLSTM
+from keras.layers import GRU, CuDNNGRU, CuDNNLSTM, average, Input
 from keras.layers import Flatten
 from keras.layers import Reshape
 from keras.layers.pooling import MaxPool1D
@@ -14,6 +14,7 @@ from keras.layers.pooling import MaxPool2D
 from keras.layers.convolutional import Conv1D
 from keras.layers.convolutional import Conv2D
 from keras.layers.convolutional import Conv3D
+from keras.models import Model
 from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from keras.models import load_model
 from keras import optimizers
@@ -43,7 +44,7 @@ def durToStr(dur):
 def loadData(path):
     try:
         return pickle.load(open(path, 'rb'))
-    except pickle.UnpicklingError:
+    except (pickle.UnpicklingError, TypeError):
         utils2.myPrint('Not a pickle file, trying joblib...')
         return joblib.load(path)
 
@@ -336,6 +337,18 @@ def trainTestkNNDTW(xTraining, xTesting, yTraining, yTesting, labelLst):
     clearGPU()
 
 
+# ensembles a new model from multiple models
+def ensembleModels(models, model_input):
+    # collect outputs of models in a list
+    yModels = [model(model_input) for model in models]
+    # averaging outputs
+    yAvg = average(yModels)
+    # build model from same input and avg output
+    modelEns = Model(inputs=model_input, outputs=yAvg, name='ensemble')
+
+    return modelEns
+
+
 # function name is explanatory enough
 def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, batchSz, labelLst, losFnc, optim,
                   learnRate, featMode, clsVer):
@@ -348,242 +361,261 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     utils2.myPrint('Train Batch:', trainShape)
     utils2.myPrint('Test Batch:', testShape)
 
-    # create the model
-    model = Sequential()
-    # todo - ai : possible variations
-    #  try lstm decay
-    #  try clipnorm and clipvalue
-    #  try convlstm2d and/or concatanate two models
-    #  try sgd instead of adam optimizer
-    if 'Specto' != featMode:  # do not convolve for spectogram, since it is not as long as other modes.
-        utils2.myPrint('Classifier Version:', clsVer)
-        if 0 == clsVer:
-            # inputs 1 # 300 epoch .3924.
-            model.add(Conv1D(8, 48, strides=48, input_shape=trainShape[1:]))
-            model.add(Activation('relu'))
-            model.add(Conv1D(16, 24, strides=24))
-            model.add(Activation('sigmoid'))
-            model.add(LSTM(24, return_sequences=True))
-            model.add(LSTM(12, return_sequences=False))
-            model.add(Dense(numCls, activation='softmax'))
-        elif 1 == clsVer:
-            model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
-            model.add(Conv1D(16, 36, strides=6, activation='relu'))
-            model.add(Conv1D(32, 24, strides=2, activation='relu'))
-            model.add(Conv1D(64, 24, strides=2, activation='relu'))
-            model.add(LSTM(64, return_sequences=True))
+    models = list()
+    for version in clsVer:
+        # create the model
+        model = Sequential()
+        # todo - ai : possible variations
+        #  try lstm decay
+        #  try clipnorm and clipvalue
+        #  try convlstm2d and/or concatanate two models
+        #  try sgd instead of adam optimizer
+        if 'Specto' != featMode:  # do not convolve for spectogram, since it is not as long as other modes.
+            utils2.myPrint('Classifier Version:', version)
+            if 0 == version:
+                # inputs 1 # 300 epoch .3924.
+                model.add(Conv1D(8, 48, strides=48, input_shape=trainShape[1:]))
+                model.add(Activation('relu'))
+                model.add(Conv1D(16, 24, strides=24))
+                model.add(Activation('sigmoid'))
+                model.add(LSTM(24, return_sequences=True))
+                model.add(LSTM(12, return_sequences=False))
+                model.add(Dense(numCls, activation='softmax'))
+            elif 1 == version:
+                model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
+                model.add(Conv1D(16, 36, strides=6, activation='relu'))
+                model.add(Conv1D(32, 24, strides=2, activation='relu'))
+                model.add(Conv1D(64, 24, strides=2, activation='relu'))
+                model.add(LSTM(64, return_sequences=True))
+                model.add(LSTM(32, activation='relu', return_sequences=False))
+                model.add(Dense(numCls, activation='softmax'))
+            elif 2 == version:
+                # resulted better than LSTM variant(1 == clsVer) with following configuration
+                # {'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/4spkr5post/', 'featureMode': 'Mags',
+                # 'channelMode': '0', 'classificationMode': 'Speaker', 'trainingEpoch': 200, 'stepSize': 0,
+                # 'sampRate': 48, 'batchSize': 32, 'lengthCut': 600, 'learningRate': 0.001,
+                # 'lossFunction': 'CatCrosEnt', 'optimizer': 'Adam', 'clsModel': 'LSTM', 'clsVersion': 2}
+                # overfitted with 1.000 accuracy(started around 30th epoch) with following configuration
+                # {'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/allSmall/', 'featureMode': 'Mags',
+                # 'channelMode': '0', 'classificationMode': 'Speaker', 'trainingEpoch': 400, 'stepSize': 0,
+                # 'sampRate': 48, 'batchSize': 32, 'lengthCut': 600, 'learningRate': 0.001,
+                # 'lossFunction': 'CatCrosEnt', 'optimizer': 'Adam', 'clsModel': 'LSTM', 'clsVersion': 2}
+                model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
+                model.add(Conv1D(16, 36, strides=6, activation='relu'))
+                model.add(Conv1D(32, 24, strides=2, activation='relu'))
+                model.add(Conv1D(64, 24, strides=2, activation='relu'))
+                model.add(GRU(64, return_sequences=True))
+                model.add(GRU(32, activation='relu', return_sequences=False))
+                model.add(Dense(numCls, activation='softmax'))
+            elif 3 == version:  # tezde -1 burdan sonra
+                model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
+                model.add(Dropout(0.5))
+                model.add(Conv1D(16, 36, strides=6, activation='relu'))
+                model.add(Dropout(0.5))
+                model.add(Conv1D(32, 24, strides=2, activation='relu'))
+                model.add(Dropout(0.5))
+                model.add(Conv1D(64, 24, strides=2, activation='relu'))
+                model.add(LSTM(64, return_sequences=True))
+                model.add(LSTM(32, activation='relu', return_sequences=False))
+                model.add(Dense(numCls, activation='softmax'))
+            elif 4 == version:
+                model.add(Conv1D(16, 96, strides=12, activation='relu', input_shape=trainShape[1:]))
+                model.add(Dropout(0.5))
+                model.add(Conv1D(32, 48, strides=6, activation='relu'))
+                model.add(Dropout(0.5))
+                model.add(Conv1D(64, 24, strides=2, activation='relu'))
+                model.add(Dropout(0.5))
+                model.add(CuDNNGRU(64, return_sequences=True))
+                model.add(Dropout(0.5))
+                model.add(CuDNNGRU(64, return_sequences=True))
+                model.add(Dropout(0.5))
+                model.add(CuDNNGRU(32, return_sequences=False))
+                model.add(Dense(numCls, activation='softmax'))
+            elif 5 == version:
+                model.add(Conv1D(16, 96, strides=12, activation='relu', input_shape=trainShape[1:]))
+                model.add(Dropout(0.5))
+                model.add(Conv1D(32, 48, strides=6, activation='relu'))
+                model.add(Dropout(0.5))
+                model.add(Conv1D(64, 24, strides=2, activation='relu'))
+                model.add(Dropout(0.5))
+                model.add(CuDNNGRU(64, return_sequences=True))
+                model.add(Dropout(0.5))
+                model.add(CuDNNGRU(32, return_sequences=False))
+                model.add(Dense(numCls, activation='softmax'))
+            elif 6 == version:
+                # todo - ai : this is temp clsVer. give a static version number to successful model structures
+                model.add(Conv1D(16, 96, strides=12, activation='relu', input_shape=trainShape[1:]))
+                model.add(Dropout(0.2))
+                model.add(Conv1D(32, 48, strides=6, activation='relu'))
+                model.add(Dropout(0.2))
+                model.add(Conv1D(64, 24, strides=2, activation='relu'))
+                model.add(Dropout(0.2))
+                model.add(CuDNNGRU(64, return_sequences=True))
+                model.add(Dropout(0.2))
+                model.add(CuDNNGRU(32, return_sequences=False))
+                model.add(Dense(numCls, activation='softmax'))
+            elif 7 == version:
+                # todo - ai : this is temp clsVer. give a static version number to successful model structures
+                model.add(Conv1D(32, 96, strides=16, activation='relu', input_shape=trainShape[1:]))
+                model.add(Conv1D(64, 48, strides=8, activation='relu'))
+                model.add(CuDNNGRU(64, return_sequences=True))
+                model.add(CuDNNGRU(32, return_sequences=False))
+                model.add(Dense(numCls, activation='softmax'))
+            else:
+                utils2.myPrint('ERROR: Unknown Classifier Version')
+                sys.exit()
+        else:  # for Spectograms
+            utils2.myPrint('Classifier Version: Spectogram')
+            model.add(LSTM(24, activation='relu', return_sequences=True, input_shape=trainShape[1:]))
             model.add(LSTM(32, activation='relu', return_sequences=False))
             model.add(Dense(numCls, activation='softmax'))
-        elif 2 == clsVer:
-            # resulted better than LSTM variant(1 == clsVer) with following configuration
-            # {'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/4spkr5post/', 'featureMode': 'Mags',
-            # 'channelMode': '0', 'classificationMode': 'Speaker', 'trainingEpoch': 200, 'stepSize': 0, 'sampRate': 48,
-            # 'batchSize': 32, 'lengthCut': 600, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt',
-            # 'optimizer': 'Adam', 'clsModel': 'LSTM', 'clsVersion': 2}
-            # overfitted with 1.000 accuracy(started around 30th epoch) with following configuration
-            # {'inputFolder': 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/allSmall/', 'featureMode': 'Mags',
-            # 'channelMode': '0', 'classificationMode': 'Speaker', 'trainingEpoch': 400, 'stepSize': 0, 'sampRate': 48,
-            # 'batchSize': 32, 'lengthCut': 600, 'learningRate': 0.001, 'lossFunction': 'CatCrosEnt',
-            # 'optimizer': 'Adam', 'clsModel': 'LSTM', 'clsVersion': 2}
-            model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
-            model.add(Conv1D(16, 36, strides=6, activation='relu'))
-            model.add(Conv1D(32, 24, strides=2, activation='relu'))
-            model.add(Conv1D(64, 24, strides=2, activation='relu'))
-            model.add(GRU(64, return_sequences=True))
-            model.add(GRU(32, activation='relu', return_sequences=False))
-            model.add(Dense(numCls, activation='softmax'))
-        elif 3 == clsVer:
-            model.add(Conv1D(8, 48, strides=12, activation='relu', input_shape=trainShape[1:]))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(16, 36, strides=6, activation='relu'))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(32, 24, strides=2, activation='relu'))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(64, 24, strides=2, activation='relu'))
-            model.add(LSTM(64, return_sequences=True))
-            model.add(LSTM(32, activation='relu', return_sequences=False))
-            model.add(Dense(numCls, activation='softmax'))
-        elif 4 == clsVer:
-            model.add(Conv1D(16, 96, strides=12, input_shape=trainShape[1:]))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(32, 48, strides=6))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(64, 24, strides=2))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(64, return_sequences=True))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(64, return_sequences=True))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(32, return_sequences=False))
-            model.add(Dense(numCls, activation='softmax'))
-        elif 5 == clsVer:
-            model.add(Conv1D(16, 96, strides=12, input_shape=trainShape[1:]))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(32, 48, strides=6))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(64, 24, strides=2))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(64, return_sequences=True))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(32, return_sequences=False))
-            model.add(Dense(numCls, activation='softmax'))
-        elif 6 == clsVer:
-            # todo - ai : this is temp clsVer. give a static version number to successful model structures
-            # same ase clsVer==5 but, strides are halved for trials of stepsize==2 parameter
-            model.add(Conv1D(16, 96, strides=6, input_shape=trainShape[1:]))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(32, 48, strides=3))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(64, 24, strides=2))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(64, return_sequences=True))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(32, return_sequences=False))
-            model.add(Dense(numCls, activation='softmax'))
-        elif 7 == clsVer:
-            # todo - ai : this is temp clsVer. give a static version number to successful model structures
-            # same as clsVer==4 but, strides are halved for trials of stepsize==2 parameter
-            model.add(Conv1D(16, 96, strides=6, input_shape=trainShape[1:]))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(32, 48, strides=3))
-            model.add(Dropout(0.5))
-            model.add(Conv1D(64, 24, strides=2))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(64, return_sequences=True))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(64, return_sequences=True))
-            model.add(Dropout(0.5))
-            model.add(CuDNNGRU(32, return_sequences=False))
-            model.add(Dense(numCls, activation='softmax'))
+
+        utils2.printModelConfig(model.get_config())
+
+        ##
+        # Optimizer selection (Paper Refs: https://keras.io/optimizers/ and
+        # https://www.dlology.com/blog/quick-notes-on-how-to-choose-optimizer-in-keras/)
+        ##
+        if 'Adam' == optim:
+            opt = optimizers.adam(lr=learnRate)
+        elif 'Sgd' == optim:
+            opt = optimizers.sgd(lr=learnRate, nesterov=False)  # works well with shallow networks
+        elif 'SgdNest' == optim:
+            opt = optimizers.sgd(lr=learnRate, nesterov=True)  # works well with shallow networks
+        elif 'Adamax' == optim:
+            opt = optimizers.adamax(lr=learnRate)
+        elif 'Nadam' == optim:
+            opt = optimizers.nadam(lr=learnRate)
+        elif 'Rms' == optim:
+            opt = optimizers.rmsprop(lr=learnRate)
         else:
-            utils2.myPrint('ERROR: Unknown Classifier Version')
+            utils2.myPrint('ERROR: Invalid Optimizer Parameter Value:', optim)
             sys.exit()
-    else:  # for Spectograms
-        utils2.myPrint('Classifier Version: Spectogram')
-        model.add(LSTM(24, activation='relu', return_sequences=True, input_shape=trainShape[1:]))
-        model.add(LSTM(32, activation='relu', return_sequences=False))
-        model.add(Dense(numCls, activation='softmax'))
 
-    utils2.printModelConfig(model.get_config())
+        ##
+        # Loss function selection (Paper Refs: https://keras.io/losses/ and
+        # https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/)
+        ##
+        if 'SparCatCrosEnt' == losFnc:
+            # sparse_categorical_crossentropy uses integers for labels instead of one-hot vectors.
+            # Saves memory when numCls is big. Other than that identical to categorical_crossentropy, use that instead.
+            # Do not use this before modifying labelList structure.
+            los = losses.sparse_categorical_crossentropy
+        elif 'CatCrosEnt' == losFnc:
+            los = losses.categorical_crossentropy
+        elif 'KLDiv' == losFnc:
+            los = losses.kullback_leibler_divergence
+        else:
+            utils2.myPrint('ERROR: Invalid Loss Function Parameter Value:', losFnc)
+            sys.exit()
 
-    ##
-    # Optimizer selection (Paper Refs: https://keras.io/optimizers/ and
-    # https://www.dlology.com/blog/quick-notes-on-how-to-choose-optimizer-in-keras/)
-    ##
-    if 'Adam' == optim:
-        opt = optimizers.adam(lr=learnRate)
-    elif 'Sgd' == optim:
-        opt = optimizers.sgd(lr=learnRate, nesterov=False)  # works well with shallow networks
-    elif 'SgdNest' == optim:
-        opt = optimizers.sgd(lr=learnRate, nesterov=True)  # works well with shallow networks
-    elif 'Adamax' == optim:
-        opt = optimizers.adamax(lr=learnRate)
-    elif 'Nadam' == optim:
-        opt = optimizers.nadam(lr=learnRate)
-    elif 'Rms' == optim:
-        opt = optimizers.rmsprop(lr=learnRate)
-    else:
-        utils2.myPrint('ERROR: Invalid Optimizer Parameter Value:', optim)
-        sys.exit()
+        model.compile(loss=los, optimizer=opt, metrics=['accuracy'])
+        utils2.myPrint('Optimizer:', opt)
+        utils2.myPrint('Learning Rate:', backend.eval(model.optimizer.lr))
+        utils2.myPrint('Loss func:', los)
+        model.summary(print_fn=utils2.myPrint)
 
-    ##
-    # Loss function selection (Paper Refs: https://keras.io/losses/ and
-    # https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/)
-    ##
-    if 'SparCatCrosEnt' == losFnc:
-        # sparse_categorical_crossentropy uses integers for labels instead of one-hot vectors.
-        # Saves memory when numClasses is big. Other than that identical to categorical_crossentropy, use that instead.
-        # Do not use this before modifying labelList structure.
-        los = losses.sparse_categorical_crossentropy
-    elif 'CatCrosEnt' == losFnc:
-        los = losses.categorical_crossentropy
-    elif 'KLDiv' == losFnc:
-        los = losses.kullback_leibler_divergence
-    else:
-        utils2.myPrint('ERROR: Invalid Loss Function Parameter Value:', losFnc)
-        sys.exit()
+        # input('Press ENTER to continue with training:')
+        utils2.myPrint('')
+        utils2.myPrint('Training:', flush=True)
+        # prepare callbacks
+        earlyStopping = EarlyStopping(monitor='val_loss', mode='min', patience=45, min_delta=1e-4,
+                                      restore_best_weights=True, verbose=1)
+        # save best model for later use
+        modelName = 'model_' + utils2.scriptStartDateTime + '_numCls-'+str(numCls) + '_loss-'+losFnc + '_opt-'+optim + \
+                    '_lr-'+str(learnRate) + '_featMode-'+featMode + '_clsVer-'+str(version) + '.clsmdl'
+        modelPath = './models/' + modelName
+        modelSaving = ModelCheckpoint(modelPath, monitor='val_loss',
+                                      mode='min', save_best_only=True, verbose=1)
+        reduceLrLoss = ReduceLROnPlateau(monitor='val_loss', mode='min', factor=0.5, cooldown=10,
+                                         patience=10, min_delta=1e-4, min_lr=learnRate/32, verbose=1)
+        # Train
+        trainingResults = model.fit(xTraining, yTraining, epochs=trainEpoch, batch_size=batchSz,
+                                    validation_data=(xTesting, yTesting),
+                                    callbacks=[earlyStopping, modelSaving, reduceLrLoss])
+        # model.fit() function prints to console but we can not grab it as it is.
+        # So myPrint it only to file with given info.
+        for i in range(len(trainingResults.history['loss'])):
+            utils2.myPrint('Epoch #%d: Loss:%.4f, Accuracy:%.4f, Validation Loss:%.4f, Validation Accuracy:%.4f'
+                           % (i+1, trainingResults.history['loss'][i], trainingResults.history['acc'][i],
+                              trainingResults.history['val_loss'][i], trainingResults.history['val_acc'][i]), mode='file')
 
-    model.compile(loss=los, optimizer=opt, metrics=['accuracy'])
-    utils2.myPrint('Optimizer:', opt)
-    utils2.myPrint('Learning Rate:', backend.eval(model.optimizer.lr))
-    utils2.myPrint('Loss func:', los)
-    model.summary(print_fn=utils2.myPrint)
+        utils2.myPrint(trainingResults.history, mode='code')
 
-    # input('Press ENTER to continue with training:')
-    utils2.myPrint('')
-    utils2.myPrint('Training:', flush=True)
-    # prepare callbacks
-    earlyStopping = EarlyStopping(monitor='val_loss', mode='min', patience=45, min_delta=1e-4,
-                                  restore_best_weights=True, verbose=1)
-    # save best model for later use
-    # xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, batchSz, labelLst, losFnc, optim,
-    #                   learnRate, featMode, clsVer):
+        utils2.myPrint('')
+        # Restore best Model
+        utils2.myPrint('Restoring best model...')
+        model = load_model(modelPath)
+        models.append(modelPath)
+        # Final evaluation of the model
+        utils2.myPrint('Test:')
+        scores = model.evaluate(xTesting, yTesting, batch_size=testShape[0])
+        utils2.myPrint('Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
 
-    modelName = 'model_' + utils2.scriptStartDateTime + '_numCls-'+str(numCls) + '_loss-'+losFnc + '_opt-'+optim + \
-                '_lr-'+str(learnRate) + '_featMode-'+featMode + '_clsVer-'+str(clsVer) + '.clsmdl'
-    modelPath = './models/' + modelName
-    modelSaving = ModelCheckpoint(modelPath, monitor='val_loss',
-                                  mode='min', save_best_only=True, verbose=1)
-    reduceLrLoss = ReduceLROnPlateau(monitor='val_loss', mode='min', factor=0.5, cooldown=10,
-                                     patience=10, min_delta=1e-4, min_lr=learnRate/32, verbose=1)
-    # Train
-    trainingResults = model.fit(xTraining, yTraining, epochs=trainEpoch, batch_size=batchSz,
-                                validation_data=(xTesting, yTesting),
-                                callbacks=[earlyStopping, modelSaving, reduceLrLoss])
-    # model.fit() function prints to console but we can not grab it as it is.
-    # So myPrint it only to file with given info.
-    for i in range(len(trainingResults.history['loss'])):
-        utils2.myPrint('Epoch #%d: Loss:%.4f, Accuracy:%.4f, Validation Loss:%.4f, Validation Accuracy:%.4f'
-                       % (i+1, trainingResults.history['loss'][i], trainingResults.history['acc'][i],
-                          trainingResults.history['val_loss'][i], trainingResults.history['val_acc'][i]), mode='file')
+        # write results to a seperate text file (part 2/3)
+        fResult = open('./Results.txt', 'a+')
+        fResult.write(', ' + modelName + ', Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
+        fResult.close()
 
-    utils2.myPrint(trainingResults.history, mode='code')
+        # todo - ai : kfold cross validation can be inserted here
 
-    utils2.myPrint('')
-    # Restore best Model
-    utils2.myPrint('Restoring best model...')
-    model = load_model(modelPath)
-    # Final evaluation of the model
-    utils2.myPrint('Test:')
-    scores = model.evaluate(xTesting, yTesting, batch_size=testShape[0])
-    utils2.myPrint('Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
+        # Stats by class
+        yTesting1Hot = np.argmax(yTesting, axis=1)  # Convert one-hot to index
+        yTesting1Hot = [labelLst[i] for i in yTesting1Hot]
+        yPredict = model.predict_classes(xTesting)
+        yPredict = [labelLst[i] for i in yPredict]
+        utils2.myPrint('Labels:', labelLst)
+        utils2.myPrint('Confusion Matrix:')
+        utils2.myPrint(pd.DataFrame(confusion_matrix(yTesting1Hot, yPredict, labels=labelLst),
+                                    index=['t:{:}'.format(x) for x in labelLst],
+                                    columns=['{:}'.format(x) for x in labelLst]))
+        utils2.myPrint('Classification Report:')
+        utils2.myPrint(classification_report(yTesting1Hot, yPredict, labels=labelLst))
+        clearGPU()
+        del model
+        gc.collect()
 
-    # write results to a seperate text file (part 2/2)
-    fResult = open('./Results.txt', 'a+')
-    fResult.write(', ' + modelName + ', Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
-    fResult.close()
+    if 1 < len(models):
+        # Test models, ensembled
+        modelId = utils2.scriptStartDateTime
+        modelName = 'model_' + modelId + '_ensembled.clsmdl'
+        modelPath = './models/' + modelName
+        # write results to a seperate text file (part 3/3)
+        for mdlIdx in range(len(models)):
+            models[mdlIdx] = load_model(models[mdlIdx])
+            models[mdlIdx].name = modelId + '_' + str(mdlIdx)  # change name to be unique
 
-    # todo - ai : kfold cross validation can be inserted here
+        model_input = Input(shape=models[0].input_shape[1:])  # c*h*w
+        modelEns = ensembleModels(models, model_input)
 
-    # Stats by class
-    yTesting = np.argmax(yTesting, axis=1)  # Convert one-hot to index
-    yTesting = [labelLst[i] for i in yTesting]
-    yPredict = model.predict_classes(xTesting)
-    yPredict = [labelLst[i] for i in yPredict]
-    utils2.myPrint('Labels:', labelLst)
-    utils2.myPrint('Confusion Matrix:')
-    utils2.myPrint(pd.DataFrame(confusion_matrix(yTesting, yPredict, labels=labelLst),
-                   index=['t:{:}'.format(x) for x in labelLst],
-                   columns=['{:}'.format(x) for x in labelLst]))
-    utils2.myPrint('Classification Report:')
-    utils2.myPrint(classification_report(yTesting, yPredict, labels=labelLst))
+        modelEns.compile(optimizer=optimizers.adam(lr=learnRate),
+                         loss=losses.categorical_crossentropy,
+                         metrics=['accuracy'])
+        modelEns.summary(print_fn=utils2.myPrint)
+        modelEns.save(modelPath)
+        utils2.myPrint('Ensemble Test:')
 
-    # Detailed stats, sample by sample prints. Uncomment with caution :). Also variable names are old. Needs refactor.
-    # fTest = filenames[-testSteps:]
-    # yPred = model.predict_classes(xTest)
-    # # yRat = model.predict(xTest)
-    # yProba = model.predict_proba(xTest)
-    #
-    # # show the inputs and predicted outputs
-    # for i in range(len(xTest)):
-    #     utils2.myPrint('File: %s ==> Predicted:%s   Real:%s -> OneHot:%s '
-    #           % (fTest[i], yPred[i], np.argmax(yTest[i]), yTest[i]), end='')
-    #     if yPred[i] == np.argmax(yTest[i]):
-    #         utils2.myPrint('+')
-    #     else:
-    #         utils2.myPrint('-------')
-    #     utils2.myPrint('Proba= %s' % yProba[i])
-    #     # utils2.myPrint("Ratios=%s" % yRat[i])
+        scores = modelEns.evaluate(xTesting, yTesting, batch_size=testShape[0])
+        utils2.myPrint('Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
+
+        fResult = open('./Results.txt', 'a+')
+        fResult.write(', ' + modelName + ', Test Loss:%.8f, Accuracy:%.4f' % (scores[0], scores[1]))
+        fResult.close()
+
+        # Stats by class
+        yTesting1Hot = np.argmax(yTesting, axis=1)  # Convert one-hot to index
+        yTesting1Hot = [labelLst[i] for i in yTesting1Hot]
+        yPredict = modelEns.predict(xTesting)
+        yPredict = np.argmax(yPredict, axis=1)
+        yPredict = [labelLst[i] for i in yPredict]
+        utils2.myPrint('Labels:', labelLst)
+        utils2.myPrint('Confusion Matrix:')
+        utils2.myPrint(pd.DataFrame(confusion_matrix(yTesting1Hot, yPredict, labels=labelLst),
+                                    index=['t:{:}'.format(x) for x in labelLst],
+                                    columns=['{:}'.format(x) for x in labelLst]))
+        utils2.myPrint('Classification Report:')
+        utils2.myPrint(classification_report(yTesting1Hot, yPredict, labels=labelLst))
+        del modelEns
 
     clearGPU()
     gc.collect()
@@ -592,7 +624,7 @@ def trainTestLSTM(xTraining, xTesting, yTraining, yTesting, numCls, trainEpoch, 
     del yTraining
     del yTesting
     del labelLst
-    del model
+    del models
     gc.collect()
     clearGPU()
 
@@ -699,15 +731,15 @@ def runConfig(parameters):
 
     saveLoadData = True
     # check if inputs prepared before
-    inputsFileName = 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/temp' \
+    inputsFileName = 'E:/atili/Datasets/BreathDataset/temp' \
                      'DataStorage/{}_inputs_{}_{}_{}_{}_{}_{}_{}.dat'\
         .format(os.path.basename(os.path.dirname(folderInputs)), featureMode, channelMode, classificationMode,
                 stepSize, sampRate, lengthCut, padding)
-    labelsFileName = 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/temp' \
+    labelsFileName = 'E:/atili/Datasets/BreathDataset/temp' \
                      'DataStorage/{}_labels_{}_{}_{}_{}_{}_{}_{}.dat'\
         .format(os.path.basename(os.path.dirname(folderInputs)), featureMode, channelMode, classificationMode,
                 stepSize, sampRate, lengthCut, padding)
-    labelDictFileName = 'D:/atili/MMIExt/Audacity/METU Recordings/Dataset/temp' \
+    labelDictFileName = 'E:/atili/Datasets/BreathDataset/temp' \
                         'DataStorage/{}_labelDict_{}_{}_{}_{}_{}_{}_{}.dat'\
         .format(os.path.basename(os.path.dirname(folderInputs)), featureMode, channelMode, classificationMode,
                 stepSize, sampRate, lengthCut, padding)
@@ -736,7 +768,7 @@ def runConfig(parameters):
             saveData(labelDict, labelDictFileName)
             utils2.myPrint('Saved:', labelDictFileName)
 
-    # write results to a seperate text file (part 1/2)
+    # write results to a seperate text file (part 1/3)
     fResult = open('./Results.txt', 'a+')
     fResult.write('\n\r ' + utils2.scriptStartDateTime + ', ')
     print(parameters, end='', file=fResult)
@@ -759,6 +791,7 @@ def runConfig(parameters):
     testSteps = totalOfInputs - trainingSteps
     utils2.myPrint(trainingSteps, 'steps for training,', testSteps, 'steps for test')
 
+    # todo - ai : validation can be added for once
     utils2.myPrint('Splitting Train and Test Data...', flush=True)
     xTrain, xTest, yTrain, yTest = train_test_split(np.asarray(inputs), np.asarray(labels),
                                                     stratify=labels, train_size=trainingSteps, test_size=testSteps)
