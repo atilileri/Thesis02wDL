@@ -46,7 +46,7 @@ Markdown==3.1
 MarkupSafe==1.1.0
 matplotlib==2.2.3
 mleap==0.8.1
-mlflow==0.9.1
+mlflow==1.23.1
 mock==2.0.0
 multiprocess==0.70.6.1
 nbformat==4.4.0
